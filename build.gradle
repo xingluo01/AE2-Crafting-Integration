@@ -153,6 +153,81 @@ dependencies {
     // 开发运行期：AE2 1.21.1 线 19.2.19（与 libs.versions.toml 对齐）及其 GuideME 前置。
     localRuntime 'curse.maven:applied-energistics-2-223794:9519988'
     localRuntime 'maven.modrinth:guideme:21.1.15'
+
+    // [环境 mod 第 1 轮] 无线终端基座：AE2WTLib 运行期 + main/client 编译期 API。
+    // 后续无线终端接 AE2WTLib 时沿用这里的版本，改版本要这几行一起动。
+    localRuntime 'de.mari_023:ae2wtlib:19.5.1'
+    localRuntime 'de.mari_023:ae2wtlib_api:19.5.1'
+    compileOnly 'de.mari_023:ae2wtlib_api:19.5.1'
+    clientCompileOnly 'de.mari_023:ae2wtlib_api:19.5.1'
+
+    // [环境 mod 第 1 轮] 配方查看器默认 JEI 口径；AE2 的 JEI 集成是独立模组，元数据把 jei 标为必需。
+    localRuntime(libs.jei.runtime)
+    localRuntime 'curse.maven:ae2-jei-integration-1074338:7727898'
+
+    // [环境 mod 第 1 轮] 客户端辅助：机器状态、UI、拼音搜索、渲染优化。
+    localRuntime 'maven.modrinth:modern-ui:3.13.0.1'
+    localRuntime 'maven.modrinth:jade:15.10.6+neoforge'
+    localRuntime 'maven.modrinth:justenoughcharacters:iNnJuUnx'
+    localRuntime 'maven.modrinth:embeddium:1.0.15+mc1.21.1'
+    // Jade provider 的编译期 API，后续写集成时不用再补坐标。
+    compileOnly 'maven.modrinth:jade:15.10.6+neoforge'
+
+    // [环境 mod 第 1 轮·追加] FTB Library + FTB Ultimine（连锁挖掘）。
+    // FTB 系只在 CurseForge / FTB 官方 maven 发布，Modrinth 上没有；这里用 -neoforge 专用构件。
+    // 版本按 ftb-ultimine-neoforge 2101.1.13 的 POM 依赖表锁定，缺任一条 FML 预加载会拦下。
+    localRuntime 'dev.architectury:architectury-neoforge:13.0.6'
+    localRuntime 'dev.ftb.mods:ftb-library-neoforge:2101.1.28'
+    localRuntime 'dev.ftb.mods:ftb-ranks-neoforge:2101.1.2'
+    localRuntime 'dev.ftb.mods:ftb-ez-crystals:21.1.1'
+    localRuntime 'dev.ftb.mods:ftb-ultimine-neoforge:2101.1.13'
+
+    // [环境 mod 第 2 轮] ExtendedAE + AdvancedAE：GUI/功能对齐的参照实现。
+    localRuntime 'curse.maven:ex-pattern-provider-892005:8511901'
+    localRuntime 'curse.maven:advancedae-1084104:7849217'
+    // AAE 必需前置 GeckoLib；EAE / AAE 共用 Glodium UI 库。
+    localRuntime 'io.github.glodblock:Glodium:1.21-2.2-neoforge'
+    localRuntime 'maven.modrinth:geckolib:gFmrC8Ru'
+
+    // [环境 mod 第 2 轮] ExtendedAE Plus：样板上传接口，后续编码终端对接的参照。
+    localRuntime 'curse.maven:extendedae-plus-1337639:8998231'
+    compileOnly 'curse.maven:extendedae-plus-1337639:8998231'
+    clientCompileOnly 'curse.maven:extendedae-plus-1337639:8998231'
+    // EAE+ 自身集成的运行期前置。
+    localRuntime 'curse.maven:curios-309927:6529130'
+    localRuntime 'curse.maven:kotlin-for-forge-351264:7471280'
+
+    // [环境 mod 第 2 轮] Applied Flux + Polymorph：升级槽与多配方切换。
+    localRuntime 'curse.maven:applied-flux-965012:9288549'
+    localRuntime 'maven.modrinth:polymorph:9yWvrF5o'
+    clientLocalRuntime 'maven.modrinth:polymorph:9yWvrF5o'
+    compileOnly 'maven.modrinth:polymorph:9yWvrF5o'
+    clientCompileOnly 'maven.modrinth:polymorph:9yWvrF5o'
+
+    // [环境 mod 第 2 轮] 存储扩展：大容量 / 混合元件测试环境。
+    localRuntime 'maven.modrinth:jjuIRIVr:RPG4EriK'          // MEGA Cells 4.11.0
+    localRuntime 'maven.modrinth:ae2-omni-cells:k444ySGT'
+
+    // [环境 mod 第 3 轮] 闪电科技族：把自动合成路由到别的特殊合成系统。
+    // 三条坐标各自同时进 main / client 编译期与运行期，改版本要一起动。
+    compileOnly 'maven.modrinth:ae2-lightning-tech:2.1.2'
+    clientCompileOnly 'maven.modrinth:ae2-lightning-tech:2.1.2'
+    localRuntime 'maven.modrinth:ae2-lightning-tech:2.1.2'
+    compileOnly 'maven.modrinth:thunderbolt-core:2.0.3'
+    clientCompileOnly 'maven.modrinth:thunderbolt-core:2.0.3'
+    localRuntime 'maven.modrinth:thunderbolt-core:2.0.3'
+    compileOnly 'maven.modrinth:ae2lt-packaged-pattern-provider:1.2.2'
+    clientCompileOnly 'maven.modrinth:ae2lt-packaged-pattern-provider:1.2.2'
+    localRuntime 'maven.modrinth:ae2lt-packaged-pattern-provider:1.2.2'
+
+    // [环境 mod 第 3 轮] NEO ECO 族：大订单吞吐。ECO / 青春版 / LDLib2 / Bigger AE2
+    // 的地板互相咬合，升任一版本前先按各自 jar 里的 mods.toml 复核一遍。
+    compileOnly 'curse.maven:neo-eco-ae-extension-1460639:9349859'
+    clientCompileOnly 'curse.maven:neo-eco-ae-extension-1460639:9349859'
+    localRuntime 'curse.maven:neo-eco-ae-extension-1460639:9349859'
+    localRuntime 'curse.maven:neo-eco-prototype-1695260:9350441'
+    localRuntime 'maven.modrinth:ldlib:A8dTTrXo'
+    localRuntime 'maven.modrinth:tHmKhHkk:RjWjkDsE'          // Bigger AE2 21.2.3
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -186,6 +261,21 @@ repositories {
     maven {
         name = 'ModMaven'
         url = 'https://modmaven.dev'
+    }
+    // JEI 官方 maven：libs.versions.toml 里的 jei-runtime 从这里取。
+    maven {
+        name = 'BlameJared'
+        url = 'https://maven.blamejared.com'
+    }
+    // FTB 官方 maven：FTB Lib / Ultimine / Ranks 的 -neoforge 专用构件。
+    maven {
+        name = 'FTB'
+        url = 'https://maven.ftb.dev/releases'
+    }
+    // Architectury API：FTB 系的必需前置（mods.toml 声明 [13.0.6,)）。
+    maven {
+        name = 'Architectury'
+        url = 'https://maven.architectury.dev/'
     }
     exclusiveContent {
         forRepository {
