@@ -1,0 +1,202 @@
+plugins {
+    id 'java-library'
+    id 'idea'
+    // Minecraft/NeoForge 开发插件与版本基线统一放在 gradle/libs.versions.toml。
+    alias libs.plugins.modDevGradle
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+sourceSets {
+    main.resources {
+        srcDir 'src/generated/resources'
+    }
+
+    // client 独立源集：通用/服务端代码不会误依赖客户端类。
+    client {
+        compileClasspath += main.output
+        runtimeClasspath += main.output + main.runtimeClasspath
+    }
+
+    test {
+        compileClasspath += main.output + main.compileClasspath
+        runtimeClasspath += main.output + main.runtimeClasspath
+    }
+}
+
+configurations {
+    runtimeClasspath.extendsFrom localRuntime
+    clientRuntimeClasspath.extendsFrom clientLocalRuntime
+    testRuntimeClasspath.extendsFrom testLocalRuntime
+
+    // 运行期 AE2 走 CurseForge 构件，编译期走 maven 件；钉到同一版本，避免 FML 按版本号
+    // 挑出两份 ae2 声明。两个坐标要一起动。
+    configureEach {
+        resolutionStrategy.force "${libs.ae2.get()}"
+    }
+}
+
+neoForge {
+    version = libs.versions.neoForge.get()
+
+    parchment {
+        minecraftVersion = libs.versions.minecraft.get()
+        mappingsVersion = libs.versions.parchment.get()
+    }
+
+    addModdingDependenciesTo(sourceSets.test)
+    addModdingDependenciesTo(sourceSets.client)
+
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+            sourceSet(sourceSets.client)
+            sourceSet(sourceSets.test)
+        }
+    }
+
+    runs {
+        configureEach {
+            systemProperty 'forge.logging.markers', 'REGISTRIES'
+            systemProperty 'forge.logging.console.level', 'debug'
+            logLevel = org.slf4j.event.Level.INFO
+        }
+
+        client {
+            client()
+            sourceSet = sourceSets.client
+            ideName = 'Client'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+        }
+
+        server {
+            server()
+            ideName = 'Server'
+            programArguments.addAll '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+        }
+
+        gameTestServer {
+            type = 'gameTestServer'
+            sourceSet = sourceSets.test
+            ideName = 'Game Tests'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+        }
+
+        data {
+            data()
+            sourceSet = sourceSets.main
+            ideName = 'Data Generation'
+            programArguments.addAll '--mod', project.mod_id, '--all', '--output', file('src/generated/resources/').absolutePath, '--existing', file('src/main/resources/').absolutePath
+        }
+    }
+}
+
+// 默认 java 组件只含 main，把 client 源集并进发行 jar。
+tasks.named('jar', Jar) {
+    dependsOn sourceSets.client.classesTaskName
+    from sourceSets.client.output
+    // LGPL-3.0 要求许可证随发行件一起分发。
+    from('LICENSE') { into 'META-INF' }
+}
+
+tasks.matching { it.name == 'remapJar' }.configureEach {
+    dependsOn sourceSets.client.classesTaskName
+}
+
+// 处理资源前由模板生成 neoforge.mods.toml。
+var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    var replaceProperties = [
+        minecraft_version_range : minecraft_version_range,
+        neo_version_range       : neo_version_range,
+        loader_version_range    : loader_version_range,
+        mod_id                  : mod_id,
+        mod_name                : mod_name,
+        mod_license             : mod_license,
+        mod_version             : mod_version,
+        mod_authors             : mod_authors,
+        mod_description         : mod_description,
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from 'src/main/templates'
+    into 'build/generated/sources/modMetadata'
+}
+
+sourceSets.main.resources.srcDir generateModMetadata
+
+tasks.named('processResources', ProcessResources) {
+    dependsOn generateModMetadata
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testImplementation 'org.mockito:mockito-core:5.15.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
+    compileOnly(libs.jetbrains.annotations)
+
+    // AE2 / GuideME 由整合包提供，只在编译期需要。
+    compileOnly(libs.ae2)
+    clientCompileOnly(libs.ae2)
+    compileOnly(libs.guideme)
+    clientCompileOnly(libs.guideme)
+
+    // 开发运行期：AE2 1.21.1 线 19.2.19（与 libs.versions.toml 对齐）及其 GuideME 前置。
+    localRuntime 'curse.maven:applied-energistics-2-223794:9519988'
+    localRuntime 'maven.modrinth:guideme:21.1.15'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+    classpath = sourceSets.test.output + sourceSets.main.output + sourceSets.test.compileClasspath + configurations.testRuntimeClasspath
+}
+
+tasks.withType(ProcessResources).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+idea {
+    module {
+        downloadSources = true
+        downloadJavadoc = true
+    }
+}
+
+// 仓库默认只留最小依赖；后续接入工作台/模组集成时，把对应 API 加进对应源集。
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven {
+        name = 'NeoForged'
+        url = 'https://maven.neoforged.net/releases/'
+    }
+    maven {
+        name = 'ModMaven'
+        url = 'https://modmaven.dev'
+    }
+    exclusiveContent {
+        forRepository {
+            maven { url = 'https://api.modrinth.com/maven' }
+        }
+        filter { includeGroup 'maven.modrinth' }
+    }
+    exclusiveContent {
+        forRepository {
+            maven { url = 'https://cursemaven.com' }
+        }
+        filter { includeGroup 'curse.maven' }
+    }
+}

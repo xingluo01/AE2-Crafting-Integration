@@ -1,0 +1,42 @@
+# Gradle / build
+build/
+.gradle/
+run/
+out/
+repo/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Windows shortcuts dropped into the repo root while working on the sibling checkouts
+*.lnk
+
+# Local
+logs/
+*.log
+*.bak
+
+# Local development dependency jars (not tracked in git).
+libs/*.jar
+
+# Guide archive unpacked next to the source it duplicates.
+src/main/resources/assets/*.zip
+
+# 本机路径声明：兄弟仓库与 libs jar 的绝对路径索引，换机器要改，不进版本库。
+docs/LOCAL_DEPS.md
+docs/LOCAL_CLONES.md
+
+# 给视频创作者的兼容清单：只作交付件发出，不入库
+/docs/COMPATIBILITY.md
+
+# Pi / 本地协作工具的会话记录与工作日志，不入库
+plans/
+.pi/
+.qoder/
+.workbuddy/

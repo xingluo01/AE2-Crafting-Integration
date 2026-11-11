@@ -1,0 +1,37 @@
+name: Build
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      # gradle.properties 里的 org.gradle.java.home=C:/Java/jdk-21 与 Windows-ROOT 信任库
+      # 只在 Windows 本地成立；命令行属性优先级高于 gradle.properties。
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew build \
+            -Dorg.gradle.java.home="$JAVA_HOME" \
+            -Dorg.gradle.jvmargs="-Xmx3G -Dhttps.protocols=TLSv1.2,TLSv1.3 -Djavax.net.ssl.trustStoreType=JKS"

@@ -1,0 +1,27 @@
+[versions]
+minecraft = "1.21.1"
+neoForge = "21.1.241"
+parchment = "2024.11.17"
+modDevGradle = "2.0.144"
+mixin = "0.8.7"
+jetbrains-annotations = "26.1.0"
+
+ae2 = "19.2.19"
+guideme = "21.1.15"
+jei = "19.56.0.438"
+
+[libraries]
+minecraft = { module = "com.mojang:minecraft", version.ref = "minecraft" }
+neoForge = { module = "net.neoforged:neoforge", version.ref = "neoForge" }
+jetbrains-annotations = { module = "org.jetbrains:annotations", version.ref = "jetbrains-annotations" }
+mixin = { module = "org.spongepowered:mixin", version.ref = "mixin" }
+
+ae2 = { module = "org.appliedenergistics:appliedenergistics2", version.ref = "ae2" }
+guideme = { module = "org.appliedenergistics:guideme", version.ref = "guideme" }
+
+emi = { module = "dev.emi:emi-neoforge", version = "1.1.22+1.21.1" }
+jei = { module = "mezz.jei:jei-1.21.1-neoforge-api", version.ref = "jei" }
+jei-runtime = { module = "mezz.jei:jei-1.21.1-neoforge", version.ref = "jei" }
+
+[plugins]
+modDevGradle = { id = "net.neoforged.moddev", version.ref = "modDevGradle" }
