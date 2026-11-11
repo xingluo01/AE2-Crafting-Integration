@@ -24,6 +24,7 @@ public final class ModCreativeTabs {
                         output.accept(ModItems.MOLECULAR_ASSEMBLER.get());
                         output.accept(ModItems.PATTERN_ENCODING_TERMINAL.get());
                         output.accept(ModItems.WIRELESS_TERMINAL.get());
+                        output.accept(ModItems.AUGMENTED_CRAFTING_PATTERN.get());
                     })
                     .build());
 

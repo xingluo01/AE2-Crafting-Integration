@@ -1,0 +1,107 @@
+{
+  "$schema": "../schema.json",
+  "includes": [
+    "../common/common.json"
+  ],
+  "background": {
+    "texture": "ae2_crafting_integration:textures/guis/molecular_assembler.png",
+    "textureWidth": 512,
+    "textureHeight": 512,
+    "srcRect": [
+      0,
+      0,
+      176,
+      314
+    ]
+  },
+  "slots": {
+    "ae2_crafting_integration:grid": {
+      "left": 8,
+      "top": 20,
+      "grid": "BREAK_AFTER_9COLS"
+    },
+    "ae2_crafting_integration:catalyst": {
+      "left": 8,
+      "top": 198,
+      "grid": "HORIZONTAL"
+    },
+    "ae2_crafting_integration:output": {
+      "left": 182,
+      "top": 146
+    },
+    "PLAYER_INVENTORY": {
+      "left": 8,
+      "top": 230,
+      "grid": "BREAK_AFTER_9COLS"
+    },
+    "PLAYER_HOTBAR": {
+      "left": 8,
+      "top": 288,
+      "grid": "HORIZONTAL"
+    }
+  },
+  "text": {
+    "dialog_title": {
+      "text": {
+        "translate": "gui.ae2_crafting_integration.molecular_assembler"
+      },
+      "position": {
+        "left": 8,
+        "top": 6
+      }
+    }
+  },
+  "images": {
+    "progressBar": {
+      "texture": "ae2_crafting_integration:textures/guis/molecular_assembler.png",
+      "textureWidth": 512,
+      "textureHeight": 512,
+      "srcRect": [
+        176,
+        0,
+        18,
+        6
+      ]
+    },
+    "sidePanel": {
+      "$comment": "输出槽与进度条挂在主面板右侧的独立浮层，贴图里也是分离的一块：美术把它整体下移到 y=134，为右上角的升级面板让出 0..82 的挂带",
+      "texture": "ae2_crafting_integration:textures/guis/molecular_assembler.png",
+      "textureWidth": 512,
+      "textureHeight": 512,
+      "srcRect": [
+        176,
+        134,
+        34,
+        50
+      ]
+    },
+    "slotBackground": {
+      "$comment": "复用本图背包栏第一格的槽底：16x16，顶 1px 深线，与 AE2 Icon.SLOT_BACKGROUND 同规格",
+      "texture": "ae2_crafting_integration:textures/guis/molecular_assembler.png",
+      "textureWidth": 512,
+      "textureHeight": 512,
+      "srcRect": [
+        8,
+        230,
+        16,
+        16
+      ]
+    }
+  },
+  "widgets": {
+    "progressBar": {
+      "$comment": "底槽 181,169,18,6 已画在浮层贴图里，这里只落覆盖层 sprite（贴图 176,0,18,6）",
+      "left": 181,
+      "top": 169
+    },
+    "sidePanel": {
+      "left": 176,
+      "top": 134
+    },
+    "upgrades": {
+      "$comment": "严格照 AE 的落法：Position.resolve 对 right 只做 imageWidth - right（不减面板宽），right:2 即左缘 174，面板左侧 2px 压在主面板右边框上、其余 26px 挂在外面，与 AE2 各机器一致。面板 28x82 占 174..201 x 0..82，底边 82 与浮层 134 之间有 52px",
+      "right": 2,
+      "top": 0
+    }
+  }
+}

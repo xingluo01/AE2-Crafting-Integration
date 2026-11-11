@@ -1,0 +1,114 @@
+{
+  "$schema": "../schema.json",
+  "$comment": "ME 增广样板编码终端界面。include ../terminals/terminal.json 拿 AE2 终端的公共部件（搜索框、滚动条、玩家背包、工具箱、公共色板）；本文件只覆盖真正不一样的东西：外框贴图、9x9 编码槽、右侧挂带里的四个槽与编写样板按钮。贴图是本模组 assets/ae2_crafting_integration/textures/guis/pattern.png（512x512，有效内容 206x347）。坐标一律用 bottom（离图片底边的距离）而不是 top：终端的行数由窗口高度动态决定，底部整块必须跟着底边走，否则窗口一变高 9x9 网格就会错位。所有数字都由 build/layout/analyze.py 从像素量出来，不是手写估的。",
+  "includes": [
+    "../terminals/terminal.json"
+  ],
+  "helpTopic": "items-blocks-machines/terminals.md#pattern-encoding-terminal-ui",
+  "slots": {
+    "ae2_crafting_integration:augmented_grid": {
+      "$comment": "9x9 增广合成编码槽：贴图网格 8,87 起，步进 18（格内 16 宽、顶 1px 深线 + 15 行实心，格间 2px 缝），9 格铺到 8..167。槽位原点取格内容区的左上角，所以是 8,87；bottom = 347 - 87。末格右缘 168 正好是右侧挂带的左边框。",
+      "left": 8,
+      "bottom": 260,
+      "grid": "BREAK_AFTER_9COLS"
+    },
+    "ae2_crafting_integration:workstation": {
+      "$comment": "标志工作方块槽：18x18 外框 178,93，取内框内容区 179,94。",
+      "left": 179,
+      "bottom": 253
+    },
+    "CRAFTING_RESULT": {
+      "$comment": "合成产物槽：24x24 外框 175,137，内衬 22x22；16x16 图标上下左右居中 → 框 + 4 = 179,141。",
+      "left": 179,
+      "bottom": 206
+    },
+    "BLANK_PATTERN": {
+      "$comment": "空白样板槽：18x18 白框 178,174，取内框内容区 179,175。",
+      "left": 179,
+      "bottom": 172
+    },
+    "ENCODED_PATTERN": {
+      "$comment": "样板输出槽：24x24 白框 175,218，16x16 图标居中 → 179,222。",
+      "left": 179,
+      "bottom": 125
+    }
+  },
+  "text": {
+    "dialog_title": {
+      "text": {
+        "translate": "gui.ae2_crafting_integration.augmented_pattern_terminal"
+      },
+      "position": {
+        "left": 8,
+        "top": 6
+      }
+    }
+  },
+  "terminalStyle": {
+    "$comment": "五片纵向切片：header(17) + 三行物品列表(18x3) + bottom(276)，合计正好 347。行切片必须同高（drawBG 按 row 的高度推进），且都取物品行贴图；行数随窗口变化时重复画出来仍是一条条相同的物品槽。bottom 取 206 宽是因为右侧挂带（x 168..205）只在这一段存在；MEStorageScreen#getScreenWidth 取五片 srcWidth 的最大值，少写一像素就会把挂带右边那条描边切掉。",
+    "header": {
+      "texture": "ae2_crafting_integration:textures/guis/pattern.png",
+      "textureWidth": 512,
+      "textureHeight": 512,
+      "srcRect": [
+        0,
+        0,
+        195,
+        17
+      ]
+    },
+    "firstRow": {
+      "texture": "ae2_crafting_integration:textures/guis/pattern.png",
+      "textureWidth": 512,
+      "textureHeight": 512,
+      "srcRect": [
+        0,
+        17,
+        195,
+        18
+      ]
+    },
+    "row": {
+      "texture": "ae2_crafting_integration:textures/guis/pattern.png",
+      "textureWidth": 512,
+      "textureHeight": 512,
+      "srcRect": [
+        0,
+        35,
+        195,
+        18
+      ]
+    },
+    "lastRow": {
+      "texture": "ae2_crafting_integration:textures/guis/pattern.png",
+      "textureWidth": 512,
+      "textureHeight": 512,
+      "srcRect": [
+        0,
+        53,
+        195,
+        18
+      ]
+    },
+    "bottom": {
+      "texture": "ae2_crafting_integration:textures/guis/pattern.png",
+      "textureWidth": 512,
+      "textureHeight": 512,
+      "srcRect": [
+        0,
+        71,
+        206,
+        276
+      ]
+    }
+  },
+  "widgets": {
+    "encodePattern": {
+      "$comment": "编写样板按钮：新贴图没给按钮留框，按钮用 AE2 的 ENCODE 图标直接盖在空白样板槽与样板输出槽之间的空档里（判定区之间的可用范围 y 193..221）。按钮顶离空白槽的图标底 5px、离输出槽 11px，节奏和 AE2 自己的编码终端一致（它的按钮顶 106、空白槽图标底 101）。注意别和两个样板槽的 18x18 判定区重叠。",
+      "left": 179,
+      "bottom": 152,
+      "width": 16,
+      "height": 16
+    }
+  }
+}

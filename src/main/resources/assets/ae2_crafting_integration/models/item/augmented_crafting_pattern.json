@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "ae2_crafting_integration:item/augmented_crafting_pattern"
+  }
+}

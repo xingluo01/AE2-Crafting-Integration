@@ -14,17 +14,17 @@ An addon for [Applied Energistics 2](https://github.com/AppliedEnergistics/Appli
 
 An AE2-style molecular assembler built around a **9x9 crafting grid**, with a **row of catalyst slots beneath the grid**. It is designed to run recipes from large crafting workbenches rather than only vanilla 3x3 recipes. At minimum it must support the workbenches from Extended Crafting (合成拓展) and the Avaritia-family workbenches (无尽重生), with room for further integrations.
 
-### ME Large Pattern Encoding Terminal
+### ME / Wireless Augmented Pattern Encoding Terminal
 
-A pattern encoding terminal whose crafting grid supports **up to 9x9** recipes, so large workbench recipes can be encoded into patterns the ME network can autocraft.
+A pattern encoding terminal whose crafting grid supports **up to 9x9** recipes, so large workbench recipes can be encoded into patterns the ME network can autocraft. It ships as a cable part (**ME Augmented Pattern Encoding Terminal**) and as a powered handheld (**Wireless Augmented Pattern Encoding Terminal**).
 
 ## Status
 
-Repository scaffold with three baseline objects registered: the molecular assembler block, the panel-form pattern encoding terminal item, and the wireless terminal item. They are plain registered objects carrying AE2's stock appearance; the 9x9 crafting, catalyst slots, pattern encoding, and ME-network behaviour are not implemented yet.
+Baseline objects are registered: the molecular assembler block (with its 9x9 GUI and AE2 capability surface) and both pattern encoding terminals. The terminals use their own menu type (`MEStorageMenu` + an 81-slot ghost grid) and their own ScreenStyle document (`screens/ae2_crafting_integration/pattern_encoding_terminal.json`) drawn with a re-exported 512x512 terminal frame; the encode button already produces the augmented pattern item, while recipe matching is currently limited to vanilla crafting recipes that fit in a 3x3 bounding box.
 
 ## Assets
 
-Models and textures are **physically copied** from the Applied Energistics 2 1.21.1 sources into `assets/ae2_crafting_integration/`. The whole parent-model and texture chain is copied as well, and no `ae2:` reference remains in the JSON models — nothing is fetched from upstream at runtime. Replace any PNG in place to change the look.
+Models and textures are **physically copied** from the Applied Energistics 2 1.21.1 sources into `assets/ae2_crafting_integration/`. The whole parent-model and texture chain is copied as well, and no `ae2:` reference remains in the JSON models — nothing is fetched from upstream at runtime. Replace any PNG in place to change the look. One deliberate exception: the terminal's ScreenStyle document includes AE2's `screens/terminals/terminal.json` for the shared terminal chrome (search field, scrollbar, player inventory, toolbox) and overrides the frame slices, the 9x9 encoding grid and the pattern slots.
 
 Copied baseline names are intentionally kept: `molecular_assembler`, `pattern_encoding_terminal` (panel), `wireless_terminal`. They are registration ids in this mod's own namespace, not AE2's.
 

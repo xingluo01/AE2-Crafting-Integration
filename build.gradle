@@ -164,6 +164,9 @@ dependencies {
     // [环境 mod 第 1 轮] 配方查看器默认 JEI 口径；AE2 的 JEI 集成是独立模组，元数据把 jei 标为必需。
     localRuntime(libs.jei.runtime)
     localRuntime 'curse.maven:ae2-jei-integration-1074338:7727898'
+    // 本模组的 JEI 插件（9x9 编码终端的配方转移按钮）要编译期 API；运行期仍由上面那行提供。
+    // 只有 client 源集会用到，主源集不引，免得服务端编译时把客户端 API 拖进来。
+    clientCompileOnly(libs.jei)
 
     // [环境 mod 第 1 轮] 客户端辅助：机器状态、UI、拼音搜索、渲染优化。
     localRuntime 'maven.modrinth:modern-ui:3.13.0.1'
@@ -228,6 +231,18 @@ dependencies {
     localRuntime 'curse.maven:neo-eco-prototype-1695260:9350441'
     localRuntime 'maven.modrinth:ldlib:A8dTTrXo'
     localRuntime 'maven.modrinth:tHmKhHkk:RjWjkDsE'          // Bigger AE2 21.2.3
+
+    // [环境 mod 第 4 轮] 作用域点名的两台 9x9 工作台，参考项目没有这三项，坐标另行补齐。
+    // 两条工作台坐标同时进 main / client 编译期与运行期，改版本时这几行一起动。
+    // Cucumber 是 Extended Crafting 的强制前置（其 mods.toml 声明 [8.0.13,)），只在运行期需要。
+    // 后续分包按 modId 命名：integration/extendedcrafting、integration/avaritia。
+    compileOnly 'curse.maven:extended-crafting-268387:8796905'
+    clientCompileOnly 'curse.maven:extended-crafting-268387:8796905'
+    localRuntime 'curse.maven:extended-crafting-268387:8796905'
+    compileOnly 'curse.maven:re-avaritia-623969:8838599'
+    clientCompileOnly 'curse.maven:re-avaritia-623969:8838599'
+    localRuntime 'curse.maven:re-avaritia-623969:8838599'
+    localRuntime 'curse.maven:cucumber-272335:8035802'
 }
 
 tasks.withType(JavaCompile).configureEach {

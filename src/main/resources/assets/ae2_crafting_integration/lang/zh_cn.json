@@ -1,6 +1,11 @@
 {
   "itemGroup.ae2_crafting_integration": "AE2 合成集成",
   "block.ae2_crafting_integration.molecular_assembler": "通用分子装配室",
-  "item.ae2_crafting_integration.pattern_encoding_terminal": "ME 大型样板编码终端（面板）",
-  "item.ae2_crafting_integration.wireless_terminal": "ME 大型样板编码终端（无线）"
+  "item.ae2_crafting_integration.pattern_encoding_terminal": "ME增广样板编码终端",
+  "item.ae2_crafting_integration.wireless_terminal": "无线增广样板编码终端",
+  "item.ae2_crafting_integration.augmented_crafting_pattern": "增广合成样板",
+  "gui.ae2_crafting_integration.molecular_assembler": "通用分子装配室",
+  "gui.ae2_crafting_integration.augmented_pattern_terminal": "ME增广样板编码终端",
+  "gui.ae2_crafting_integration.jei.recipe_too_large": "这个配方超出 9x9 编码台",
+  "gui.ae2_crafting_integration.jei.incomplete_recipe": "配方缺少锻造所需的格子"
 }
