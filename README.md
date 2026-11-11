@@ -20,7 +20,13 @@ A pattern encoding terminal whose crafting grid supports **up to 9x9** recipes, 
 
 ## Status
 
-Repository scaffold. Neither machine is implemented yet. The build system, mod metadata, source-set layout and CI are in place; gameplay content starts from this baseline.
+Repository scaffold with three baseline objects registered: the molecular assembler block, the panel-form pattern encoding terminal item, and the wireless terminal item. They are plain registered objects carrying AE2's stock appearance; the 9x9 crafting, catalyst slots, pattern encoding, and ME-network behaviour are not implemented yet.
+
+## Assets
+
+Models and textures are **physically copied** from the Applied Energistics 2 1.21.1 sources into `assets/ae2_crafting_integration/`. The whole parent-model and texture chain is copied as well, and no `ae2:` reference remains in the JSON models — nothing is fetched from upstream at runtime. Replace any PNG in place to change the look.
+
+Copied baseline names are intentionally kept: `molecular_assembler`, `pattern_encoding_terminal` (panel), `wireless_terminal`. They are registration ids in this mod's own namespace, not AE2's.
 
 ## Build
 

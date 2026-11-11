@@ -28,6 +28,8 @@ AE2 附属 `ae2_crafting_integration`。命名按「后续更多集成」定，�
 - **集成红线**：`integration/<邻居>` 只写那个邻居的适配；邻居的类型名不得漏进总是加载的类，缺那个模组时会在加载阶段炸。后续接入工作台模组时按此分包。
 - **名字即协议**：客户端/服务端靠字符串动作名与 `@GuiSync(n)` 注解值配对，不能改、不能被第二个字段复用。
 - **文件规模**：一个类只装一件能一句话讲清的事，超过 800 行必须按职责拆（目标 ≤ 650 行）。
+- **资源自包含**：`assets/ae2_crafting_integration/` 下的模型与纹理是 AE2 本体资源的物理副本，JSON 里不得出现 `ae2:` 引用；parent 模型链（`item/display_base` → `item/part_base`、`part/display_off`）与纹理已一并复制。换外观直接覆盖同名 PNG，不要改成远程引用。
+- **基线三件套**：`molecular_assembler`（方块）、`pattern_encoding_terminal`（面板物品）、`wireless_terminal`（无线物品）目前只做注册与外观，AE2 part / 无线终端交互逻辑待接入；注册 id 沿用 AE2 原名，处于本模组自己的 namespace。
 - **依赖版本**：`gradle/libs.versions.toml` 的 AE2 编译基线与 `build.gradle` 里 CurseForge 运行期构件必须同版，`resolutionStrategy.force` 已钉住；两个坐标要一起动。
 - **本地件**：`libs/*.jar` 与 `docs/LOCAL_*.md` 不进版本库；缺了运行期集成无法验证。
 - **验证**：改动后按类型跑 `./gradlew build` / `test`；界面交互与时序仍需 `runClient` 实机验证。
@@ -35,12 +37,13 @@ AE2 附属 `ae2_crafting_integration`。命名按「后续更多集成」定，�
 ## 目录
 
 ```
-src/main/java/io/github/lounode/ae2crafting/   通用与服务端代码
-src/main/templates/META-INF/neoforge.mods.toml 模组元数据模板（构建时展开）
-src/main/resources/                            资源（骨架占位）
-src/client/java/                               仅客户端代码
-src/test/java/                                 单元测试
-src/generated/resources/                       数据生成输出
+src/main/java/io/github/lounode/ae2crafting/            模组入口
+src/main/java/io/github/lounode/ae2crafting/registry/   方块 / 物品 / 创造页注册
+src/main/templates/META-INF/neoforge.mods.toml          模组元数据模板（构建时展开）
+src/main/resources/assets/ae2_crafting_integration/     模型、纹理、lang（物理复制自 AE2 本体）
+src/client/java/                                        仅客户端代码
+src/test/java/                                          单元测试
+src/generated/resources/                                数据生成输出
 ```
 
 ## 常用命令

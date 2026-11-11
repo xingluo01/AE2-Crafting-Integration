@@ -1,0 +1,8 @@
+{
+  "parent": "ae2_crafting_integration:part/display_off",
+  "textures": {
+    "lightsBright": "ae2_crafting_integration:part/pattern_encoding_terminal_bright",
+    "lightsMedium": "ae2_crafting_integration:part/pattern_encoding_terminal_medium",
+    "lightsDark": "ae2_crafting_integration:part/pattern_encoding_terminal_dark"
+  }
+}

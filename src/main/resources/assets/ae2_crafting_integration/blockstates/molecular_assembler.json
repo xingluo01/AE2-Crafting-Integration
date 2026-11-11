@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "ae2_crafting_integration:block/molecular_assembler"
+    }
+  }
+}

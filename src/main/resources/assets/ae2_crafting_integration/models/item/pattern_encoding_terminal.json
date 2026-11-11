@@ -1,0 +1,9 @@
+{
+  "parent": "ae2_crafting_integration:item/display_base",
+  "textures": {
+    "front": "ae2_crafting_integration:part/monitor_front",
+    "front_bright": "ae2_crafting_integration:part/pattern_encoding_terminal_bright",
+    "front_medium": "ae2_crafting_integration:part/pattern_encoding_terminal_medium",
+    "front_dark": "ae2_crafting_integration:part/pattern_encoding_terminal_dark"
+  }
+}
