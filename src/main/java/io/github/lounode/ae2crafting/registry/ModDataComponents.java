@@ -24,7 +24,7 @@ public final class ModDataComponents {
     public static final Supplier<DataComponentType<AugmentedPatternData>> AUGMENTED_PATTERN =
             DATA_COMPONENTS.register("augmented_pattern",
                     () -> DataComponentType.<AugmentedPatternData>builder()
-                            .persistent(AugmentedPatternData.CODEC)
+                            .persistent(AugmentedPatternData.codec())
                             .networkSynchronized(AugmentedPatternData.STREAM_CODEC)
                             .build());
 

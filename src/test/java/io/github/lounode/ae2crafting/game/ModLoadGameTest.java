@@ -1,18 +1,30 @@
 package io.github.lounode.ae2crafting.game;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameType;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
+import appeng.api.crafting.PatternDetailsHelper;
 import appeng.api.features.GridLinkables;
 import appeng.api.parts.IPartItem;
+import appeng.api.stacks.GenericStack;
 import appeng.items.parts.PartItem;
 import appeng.items.tools.powered.WirelessTerminalItem;
+import appeng.menu.SlotSemantics;
+import appeng.menu.locator.MenuLocators;
 
 import io.github.lounode.ae2crafting.AE2CraftingIntegration;
+import io.github.lounode.ae2crafting.common.item.WirelessAugmentedPatternTerminalHost;
 import io.github.lounode.ae2crafting.common.menu.AugmentedPatternEncodingTermMenu;
 import io.github.lounode.ae2crafting.common.part.AugmentedPatternEncodingTerminalPart;
+import io.github.lounode.ae2crafting.common.pattern.AugmentedPattern;
 import io.github.lounode.ae2crafting.registry.ModBlocks;
 import io.github.lounode.ae2crafting.registry.ModItems;
 import io.github.lounode.ae2crafting.registry.ModMenuTypes;
@@ -58,6 +70,39 @@ public class ModLoadGameTest {
         helper.assertTrue(ModMenuTypes.AUGMENTED_PATTERN_TERMINAL.get() == AugmentedPatternEncodingTermMenu.TYPE,
                 "augmented pattern terminal menu type is not registered");
         helper.assertTrue(GridLinkables.get(wireless) != null, "wireless terminal is not registered for grid linking");
+        helper.succeed();
+    }
+
+    /**
+     * 样板输出槽只收增广合成样板：AE2 原版的合成/处理样板与普通物品都放不进去，
+     * 自己的样板（3×3 最小编码）放得进。挡的就是「把 AE2 样板塞进来卡死下一次编码」。
+     */
+    @GameTest(template = "empty")
+    public void encodedPatternSlotOnlyAcceptsAugmentedPatterns(GameTestHelper helper) {
+        var item = ModItems.WIRELESS_TERMINAL.get();
+        var player = helper.makeMockPlayer(GameType.SURVIVAL);
+        var locator = MenuLocators.forStack(new ItemStack(item));
+        var host = new WirelessAugmentedPatternTerminalHost(item, player, locator, (p, menu) -> {
+        });
+        var menu = new AugmentedPatternEncodingTermMenu(0, player.getInventory(), host);
+
+        var slot = menu.getSlots(SlotSemantics.ENCODED_PATTERN).getFirst();
+
+        var aePattern = PatternDetailsHelper.encodeProcessingPattern(
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT))),
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_BLOCK))));
+        helper.assertFalse(slot.mayPlace(aePattern), "AE2 原版样板放进了样板输出槽");
+        helper.assertFalse(slot.mayPlace(new ItemStack(Items.CRAFTING_TABLE)), "普通物品放进了样板输出槽");
+
+        var grid = new ArrayList<GenericStack>(9);
+        for (int i = 0; i < 9; i++) {
+            grid.add(null);
+        }
+        grid.set(0, GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT)));
+        var augmented = new ItemStack(ModItems.AUGMENTED_CRAFTING_PATTERN.get());
+        AugmentedPattern.encode(augmented, 3, 3, grid,
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_BLOCK))), null);
+        helper.assertTrue(slot.mayPlace(augmented), "增广合成样板反而放不进样板输出槽");
         helper.succeed();
     }
 }

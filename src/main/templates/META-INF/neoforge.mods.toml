@@ -30,4 +30,15 @@ versionRange="[19.0.0,)"
 ordering="AFTER"
 side="BOTH"
 
+# 无线通用终端（WUT）融合是硬集成：无线终端物品直接继承 ae2wtlib_api 的 ItemWT、
+# 宿主继承 WTMenuHost，缺了这两个类会在物品注册阶段 NoClassDefFoundError。
+# 声明成 required，让缺依赖时由加载器给出明确的依赖缺失提示，而不是在半途崩溃。
+# ae2wtlib 自己 required 依赖 ae2wtlib_api，所以这里只写本体即可。
+[[dependencies.${mod_id}]]
+modId="ae2wtlib"
+type="required"
+versionRange="[19.5.1,20.0.0)"
+ordering="AFTER"
+side="BOTH"
+
 # 后续接入的工作台/模组集成统一写成可选依赖，ordering 用 AFTER。

@@ -127,10 +127,14 @@ public final class AugmentedRecipeMatcher {
             }
 
             var input = CraftingInput.of(bounds.width(), bounds.height(), bounds.crop(items, width));
-            return level.getRecipeManager()
-                    .getRecipeFor(RecipeType.CRAFTING, input, level)
-                    .map(holder -> new Match(holder.value().assemble(input, level.registryAccess()), holder.id()))
-                    .orElse(null);
+            var holder = level.getRecipeManager().getRecipeFor(RecipeType.CRAFTING, input, level).orElse(null);
+            if (holder == null) {
+                return null;
+            }
+            var recipe = holder.value();
+            // 余料按裁剪后的输入返回，这里摊回整张网格：装配室完成一次合成后要逐格回填。
+            var remaining = bounds.scatter(recipe.getRemainingItems(input), width, height, ItemStack.EMPTY);
+            return new Match(recipe.assemble(input, level.registryAccess()), holder.id(), remaining);
         }
     }
 }

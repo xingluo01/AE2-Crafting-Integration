@@ -154,6 +154,74 @@ class GridBoundsTest {
         assertEquals("", centered.get(12));
     }
 
+    /**
+     * {@code scatter} 是 {@code crop} 的逆运算：配方余料按裁剪后的输入返回，
+     * 摊回 9×9 时必须落回原来的格子，否则装配室会把空桶塞到别的格子里。
+     */
+    @Test
+    void scatterPutsCroppedValuesBackWhereTheyCameFrom() {
+        var grid = emptyGrid();
+        grid.set(1 * GRID + 2, "stone");
+        grid.set(2 * GRID + 3, "dirt");
+
+        var bounds = GridBounds.of(grid, GRID, GRID, String::isEmpty);
+        var cropped = bounds.crop(grid, GRID);
+        var scattered = bounds.scatter(cropped, GRID, GRID, "");
+
+        assertEquals(GRID * GRID, scattered.size());
+        assertEquals("stone", scattered.get(1 * GRID + 2));
+        assertEquals("dirt", scattered.get(2 * GRID + 3));
+        assertEquals("", scattered.get(0));
+    }
+
+    /** 居中铺开的逆运算：按同一套中心偏移反推回源网格，居中留白不进结果。 */
+    @Test
+    void scatterCenteredUndoesTheCentering() {
+        var grid = emptyGrid();
+        grid.set(1 * GRID + 2, "a");
+        grid.set(1 * GRID + 3, "b");
+        grid.set(2 * GRID + 2, "c");
+        grid.set(2 * GRID + 3, "d");
+
+        var bounds = GridBounds.of(grid, GRID, GRID, String::isEmpty);
+        var centered = bounds.centerIn(grid, GRID, 5, 5, "");
+        var scattered = bounds.scatterCentered(centered, GRID, GRID, 5, 5, "");
+
+        assertEquals("a", scattered.get(1 * GRID + 2));
+        assertEquals("b", scattered.get(1 * GRID + 3));
+        assertEquals("c", scattered.get(2 * GRID + 2));
+        assertEquals("d", scattered.get(2 * GRID + 3));
+        assertEquals("", scattered.get(0));
+    }
+
+    /**
+     * 余料表按**包围盒尺寸**返回时（无尽重生的表格配方就是这么写的）也要摊得回去。
+     *
+     * <p>这条防的是「拿台面坐标去读包围盒长度的表」：包围盒 2×2、台面 5×5 时，
+     * 面积不同，算错了就是越界——实机上表现为 {@code Index 81 out of bounds for length 81}，
+     * 而且只在某些档位的配方上出现。</p>
+     */
+    @Test
+    void scatterCenteredAlsoAcceptsBoundsSizedRemainders() {
+        var grid = emptyGrid();
+        grid.set(1 * GRID + 2, "a");
+        grid.set(1 * GRID + 3, "b");
+        grid.set(2 * GRID + 2, "c");
+        grid.set(2 * GRID + 3, "d");
+
+        var bounds = GridBounds.of(grid, GRID, GRID, String::isEmpty);
+        // 4 格而不是 5×5 的 25 格：坐标系换了，长度也就变了。
+        var boundsSized = bounds.crop(grid, GRID);
+        var scattered = bounds.scatterCentered(boundsSized, GRID, GRID, 5, 5, "");
+
+        assertEquals(GRID * GRID, scattered.size());
+        assertEquals("a", scattered.get(1 * GRID + 2));
+        assertEquals("b", scattered.get(1 * GRID + 3));
+        assertEquals("c", scattered.get(2 * GRID + 2));
+        assertEquals("d", scattered.get(2 * GRID + 3));
+        assertEquals("", scattered.get(0));
+    }
+
     private static ArrayList<String> emptyGrid() {
         return new ArrayList<>(Collections.nCopies(GRID * GRID, (String) null));
     }

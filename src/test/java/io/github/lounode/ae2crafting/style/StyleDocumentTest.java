@@ -73,8 +73,12 @@ class StyleDocumentTest {
     }
 
     /**
-     * 9x9 底板的槽底复用背包栏第一格：16×16、顶 1px 深线，与 AE2 {@code Icon.SLOT_BACKGROUND}
-     * 同规格。写入错坐标会让网格槽位换成别处的贴图块。
+     * 贴图里背包栏第一格的槽底（16×16、顶 1px 深线）仍保留在 AEjson 里作像素对照。
+     *
+     * <p><b>运行时已不再引用</b>：9x9 网格槽改成 {@code IOptionalSlot} 后，槽底由
+     * {@code AEBaseScreen#renderBg} 用 {@code Icon.SLOT_BACKGROUND} 按 1.0 / 0.2 alpha 画，
+     * 与 AE2 原版分子装配室一致。这条断言锁的是「贴图那块槽底还在原来的坐标上」，
+     * 免得改贴图时把可用的备用 sprite 挪没了。</p>
      */
     @Test
     void gridSlotBackgroundReusesThePlayerInventorySlot() {

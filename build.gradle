@@ -243,6 +243,13 @@ dependencies {
     clientCompileOnly 'curse.maven:re-avaritia-623969:8838599'
     localRuntime 'curse.maven:re-avaritia-623969:8838599'
     localRuntime 'curse.maven:cucumber-272335:8035802'
+
+    // [环境 mod 第 5 轮] 无尽乐事（Avaritia's Delight 1.6.3，1.21.1 / NeoForge）及其前置。
+    // 它声明的三条前置中，Re:Avaritia 1.4.2（8838599）与 Cucumber 已在第 4 轮、
+    // Architectury API 13.0.6 已在第 1 轮追加段，这里只缺农夫乐事；联动本体一并装进开发运行环境。
+    // 两条都只在运行期需要，不进编译期：本模组不引用它们的类型，配方/物品适配仍走 integration 隔离。
+    localRuntime 'maven.modrinth:farmers-delight:1.21.1-1.3.4'
+    localRuntime 'curse.maven:avaritias-delight-1289374:8133384'
 }
 
 tasks.withType(JavaCompile).configureEach {

@@ -26,12 +26,19 @@ public final class ModCapabilities {
                 ModBlockEntities.MOLECULAR_ASSEMBLER.get(),
                 (blockEntity, context) -> blockEntity);
 
-        // 物品能力：暴露催化剂栏与产物槽（9x9 网格刻意不给外部注入）。
+        // 物品能力：暴露标志物/催化剂栏与产物槽（9x9 网格刻意不给外部注入）。
         // AE2 对自家装配室的同一能力也只允许从产物槽抽取，这里用 isItemValid 达成同样效果。
         event.registerBlockEntity(
                 Capabilities.ItemHandler.BLOCK,
                 ModBlockEntities.MOLECULAR_ASSEMBLER.get(),
                 (blockEntity, side) -> blockEntity.getExposedInventory().toItemHandler());
+
+        // 合成机器：样板供应器靠这张表把本机认成「能接样板的机器」（ICraftingMachine.of → pushPattern）。
+        // 不登记不报错，只表现为供应器永远绕开这台机器、自动合成跑不起来。
+        event.registerBlockEntity(
+                AECapabilities.CRAFTING_MACHINE,
+                ModBlockEntities.MOLECULAR_ASSEMBLER.get(),
+                (blockEntity, side) -> blockEntity);
     }
 
     private ModCapabilities() {

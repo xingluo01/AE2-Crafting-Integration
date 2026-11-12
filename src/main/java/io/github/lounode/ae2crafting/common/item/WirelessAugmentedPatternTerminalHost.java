@@ -10,30 +10,34 @@ import net.minecraft.world.level.Level;
 
 import appeng.helpers.IPatternTerminalLogicHost;
 import appeng.helpers.IPatternTerminalMenuHost;
-import appeng.helpers.WirelessTerminalMenuHost;
 import appeng.menu.ISubMenu;
 import appeng.menu.locator.ItemMenuHostLocator;
 import appeng.parts.encoding.PatternEncodingLogic;
 import appeng.util.ConfigInventory;
+
+import de.mari_023.ae2wtlib.api.terminal.ItemWT;
+import de.mari_023.ae2wtlib.api.terminal.WTMenuHost;
 
 import io.github.lounode.ae2crafting.common.menu.WorkstationHost;
 
 /**
  * 无线增广样板编码终端的菜单宿主。
  *
- * <p>AE2 本体只给了无线合成终端（{@code WirelessCraftingTerminalMenuHost}），样板编码这一侧
- * 没有现成实现，所以这里把两半拼起来：{@link WirelessTerminalMenuHost} 负责网格连接、能量与
- * 终端设置，{@link PatternEncodingLogic} 负责编码台（模式、输入输出、空白/已编码样板格）。</p>
+ * <p>把三半拼起来：{@link WTMenuHost}（AE2WTLib）负责网格连接、量子桥/无线接入点、
+ * 能量与终端设置；{@link PatternEncodingLogic} 负责编码台（模式、输入输出、空白/已编码样板格）；
+ * {@link WorkstationHost} 负责本模组独有的「标志工作方块」那一格。</p>
+ *
+ * <p>继承 {@code WTMenuHost} 是为了能被 WUT 的 {@code WTMenuHostFactory} 直接构造：
+ * 融合后的通用终端切到本终端时，{@code WUTHandler} 拿到的就是同一个宿主，标志物槽与编码台
+ * 照常从物品 {@code CUSTOM_DATA} 读写。构造签名因此固定为
+ * {@code (ItemWT, Player, ItemMenuHostLocator, BiConsumer)}，改它等于让方法引用失配。</p>
  *
  * <p>编码台不是方块也不是部件，没有一个天然的存档位置，所以写进物品的
  * {@code CUSTOM_DATA} 组件：{@code markForSave} 由编码逻辑在格子变动时回调，序列化后随物品栈
- * 同步给客户端——客户端重开界面时 {@code PatternEncodingTermMenu} 构造里读到的就是同一份。</p>
- *
- * <p>标志工作方块（{@link WorkstationHost}）同理，只是它的键不在
- * {@link PatternEncodingLogic} 的读写范围内，由本类单独写进同一个根 compound。</p>
+ * 同步给客户端——客户端重开界面时菜单构造里读到的就是同一份。WUT 形态下这个根键写在通用终端
+ * 物品上，与其它终端的配置互不干扰。</p>
  */
-public class WirelessAugmentedPatternTerminalHost
-        extends WirelessTerminalMenuHost<WirelessAugmentedPatternTerminalItem>
+public class WirelessAugmentedPatternTerminalHost extends WTMenuHost
         implements IPatternTerminalMenuHost, IPatternTerminalLogicHost, WorkstationHost {
 
     /** 物品 NBT 里装编码逻辑的根键，改它等于让所有已保存的样板失效。 */
@@ -55,7 +59,7 @@ public class WirelessAugmentedPatternTerminalHost
     /** 读档期间编码逻辑会回调 markForSave，此时不能反写，否则会把半截数据写回物品。 */
     private boolean loading;
 
-    public WirelessAugmentedPatternTerminalHost(WirelessAugmentedPatternTerminalItem item, Player player,
+    public WirelessAugmentedPatternTerminalHost(ItemWT item, Player player,
             ItemMenuHostLocator locator, BiConsumer<Player, ISubMenu> returnToMainMenu) {
         super(item, player, locator, returnToMainMenu);
         // 构造期间就可能回调 markForSave，所以 logic 先赋给字段再读档。

@@ -5,44 +5,59 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 
 import appeng.client.gui.implementations.UpgradeableScreen;
-import appeng.client.gui.style.Blitter;
 import appeng.client.gui.style.StyleManager;
 import appeng.client.gui.widgets.ProgressBar;
 
 import io.github.lounode.ae2crafting.client.AE2CraftingClient;
+import io.github.lounode.ae2crafting.client.gui.widgets.CoveringProgressBar;
 import io.github.lounode.ae2crafting.common.menu.MolecularAssemblerMenu;
-import io.github.lounode.ae2crafting.registry.ModSlotSemantics;
 
 /**
  * 通用分子装配室界面。
  *
- * <p>槽位坐标、背景、标题、进度条与槽底样式全部来自 AEjson；本类只补三件 JSON 表达不了的事：
- * 绑定进度条控件、把 9x9 空白底板铺上槽底、以及把指南按钮指向本模组的指南书。</p>
+ * <p>槽位坐标、背景、标题、进度条底图全部来自 AEjson；本类只补三件 JSON 表达不了的事：
+ * 绑定进度条控件、补画右侧挂带、把指南按钮指向本模组的指南书。</p>
+ *
+ * <p><b>9x9 槽底不在这里画</b>：网格槽实现了 {@code IOptionalSlot} 且
+ * {@code isRenderDisabled()} 恒真，{@code AEBaseScreen#renderBg} 会按
+ * {@code isSlotEnabled()} 以 1.0 / 0.2 的 alpha 画 {@code Icon.SLOT_BACKGROUND}——
+ * 这正是 AE2 原版分子装配室对「空格子」的处理：没被样板填的格子几乎隐形，
+ * 填了料的格子才显出完整槽框。之前自己叠一层半透明黑反而比原版重。</p>
  *
  * <p>继承 {@link UpgradeableScreen} 而不是 {@code AEBaseScreen}：父类会把右侧升级面板
- * （{@code widgets.upgrades}，位置来自 {@code common.json}）挂上，左侧竖直工具栏则由
- * {@code AEBaseScreen} 在构造时自动加指南按钮。</p>
+ * （{@code widgets.upgrades}）挂上，左侧竖直工具栏则由 {@code AEBaseScreen} 自动加指南按钮。</p>
  */
 public class MolecularAssemblerScreen extends UpgradeableScreen<MolecularAssemblerMenu> {
 
     private static final String SIDE_PANEL = "sidePanel";
-    private static final String SLOT_BACKGROUND = "slotBackground";
 
-    /** 构造时拷一份，避免循环里反复改写 AEjson 里同一个 Blitter 实例的位置。 */
-    private final Blitter gridSlotBackground;
+    private final ProgressBar progressBar;
 
     public MolecularAssemblerScreen(MolecularAssemblerMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title,
                 StyleManager.loadStyleDoc("/screens/ae2_crafting_integration/molecular_assembler.json"));
 
-        this.gridSlotBackground = style.getImage(SLOT_BACKGROUND).copy();
-        widgets.add("progressBar", new ProgressBar(
-                menu, style.getImage("progressBar"), ProgressBar.Direction.HORIZONTAL));
+        this.progressBar = new CoveringProgressBar(menu, style.getImage("progressBar"),
+                ProgressBar.Direction.HORIZONTAL);
+        widgets.add("progressBar", progressBar);
     }
 
     @Override
     protected void openHelp() {
         AE2CraftingClient.openGuide(getPlayer());
+    }
+
+    /**
+     * AE2 原版分子装配室也在这里把进度 tooltip 换成百分比；本模组照做，只是百分比按
+     * {@code current / max} 算而不是直接把进度值当百分数（档位表改了也不会显示错）。
+     */
+    @Override
+    protected void updateBeforeRender() {
+        super.updateBeforeRender();
+        int max = getMenu().getMaxProgress();
+        int current = Math.min(getMenu().getCurrentProgress(), max);
+        int percent = max > 0 ? current * 100 / max : 0;
+        progressBar.setFullMsg(Component.literal(percent + "%"));
     }
 
     /**
@@ -53,7 +68,6 @@ public class MolecularAssemblerScreen extends UpgradeableScreen<MolecularAssembl
             float partialTicks) {
         super.drawBG(graphics, offsetX, offsetY, mouseX, mouseY, partialTicks);
         drawSidePanel(graphics, offsetX, offsetY);
-        drawGridSlots(graphics, offsetX, offsetY);
     }
 
     /**
@@ -65,20 +79,5 @@ public class MolecularAssemblerScreen extends UpgradeableScreen<MolecularAssembl
         style.getImage(SIDE_PANEL)
                 .dest(offsetX + position.getLeft(), offsetY + position.getTop())
                 .blit(graphics);
-    }
-
-    /**
-     * 9x9 底板在贴图里是纯色空白，槽底直接复用背包栏那一格（{@code images.slotBackground}）：
-     * 16×16、顶 1px 深线、四周 2px 背景间隔，与 AE2 {@code Icon.SLOT_BACKGROUND} 同规格。
-     *
-     * <p>不用 {@code graphics.fill} 手绘：上一版按 18×18 四边描边画，盖掉了底板的 203 底色，
-     * 相邻边框又叠成 2px 深线，视觉上比 AE2 的槽位重一整圈。</p>
-     */
-    private void drawGridSlots(GuiGraphics graphics, int offsetX, int offsetY) {
-        for (var slot : getMenu().getSlots(ModSlotSemantics.GRID)) {
-            gridSlotBackground
-                    .dest(offsetX + slot.x, offsetY + slot.y)
-                    .blit(graphics);
-        }
     }
 }

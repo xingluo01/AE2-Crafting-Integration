@@ -1,5 +1,6 @@
 package io.github.lounode.ae2crafting.integration.avaritia;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.world.item.ItemStack;
@@ -77,10 +78,29 @@ public final class AvaritiaSmithingMatcher implements GridMatcher {
         for (var holder : level.getRecipeManager().getAllRecipesFor(type)) {
             var recipe = holder.value();
             if (recipe.matches(input, level)) {
-                return new Match(recipe.assemble(input, level.registryAccess()), holder.id());
+                return new Match(recipe.assemble(input, level.registryAccess()), holder.id(),
+                        scatterSmithingRemaining(bounds, recipe.getRemainingItems(input), width, height));
             }
         }
         return null;
+    }
+
+    /**
+     * 锻造的 5 个余料按 {@code 模板, 基底, 添加1..3} 的顺序返回，先摆回 3×3 的十字，
+     * 再连同整个概念区一起摊回 9×9——与 {@link GridBounds#centerIn} 用的是同一套中心偏移。
+     */
+    private static List<ItemStack> scatterSmithingRemaining(GridBounds bounds, List<ItemStack> remaining,
+            int width, int height) {
+        var cross = new ArrayList<ItemStack>(9);
+        for (int i = 0; i < 9; i++) {
+            cross.add(ItemStack.EMPTY);
+        }
+        cross.set(LEFT, remaining.get(0));
+        cross.set(CENTER, remaining.get(1));
+        cross.set(RIGHT, remaining.get(2));
+        cross.set(TOP, remaining.get(3));
+        cross.set(BOTTOM, remaining.get(4));
+        return bounds.scatterCentered(cross, width, height, 3, 3, ItemStack.EMPTY);
     }
 
     /** 不带标志物的四参版本：锻造台是必需的，直接放弃。 */

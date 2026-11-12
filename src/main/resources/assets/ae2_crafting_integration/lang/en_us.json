@@ -5,7 +5,11 @@
   "item.ae2_crafting_integration.wireless_terminal": "Wireless Augmented Pattern Encoding Terminal",
   "item.ae2_crafting_integration.augmented_crafting_pattern": "Augmented Crafting Pattern",
   "gui.ae2_crafting_integration.molecular_assembler": "Universal Molecular Assembler Chamber",
-  "gui.ae2_crafting_integration.augmented_pattern_terminal": "ME Augmented Pattern Encoding Terminal",
+  "gui.ae2_crafting_integration.augmented_pattern_encoding": "Augmented Pattern Encoding",
+  "gui.ae2_crafting_integration.assembler.workstations": "Workstations",
   "gui.ae2_crafting_integration.jei.recipe_too_large": "This recipe does not fit a 9x9 encoding grid",
-  "gui.ae2_crafting_integration.jei.incomplete_recipe": "This smithing recipe is missing grid slots"
+  "gui.ae2_crafting_integration.jei.incomplete_recipe": "This smithing recipe is missing grid slots",
+  "gui.ae2_crafting_integration.assembler.speed_cards": "Acceleration Cards: %s",
+  "gui.ae2_crafting_integration.pattern.workstation": "Workstation",
+  "gui.ae2_crafting_integration.pattern.workstation.none": "Not required"
 }

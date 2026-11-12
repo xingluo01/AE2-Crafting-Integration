@@ -23,10 +23,26 @@ public interface GridMatcher {
     /**
      * 一次命中的结果。
      *
-     * @param output   产物。已经过 {@code assemble}，数量是本次合成的真实产出
-     * @param recipeId 命中的配方 id；邻居的配方类型拿不到 id 时允许为 {@code null}
+     * @param output    产物。已经过 {@code assemble}，数量是本次合成的真实产出
+     * @param recipeId  命中的配方 id；邻居的配方类型拿不到 id 时允许为 {@code null}
+     * @param remaining 合成后每格剩下的东西（铁桶→空桶、无尽的不消耗催化剂），
+     *                  <b>长度与顺序与传进 {@code match} 的 {@code items} 一致</b>；
+     *                  没有余料信息时是空列表
      */
-    record Match(ItemStack output, @Nullable ResourceLocation recipeId) {
+    record Match(ItemStack output, @Nullable ResourceLocation recipeId, List<ItemStack> remaining) {
+
+        public Match {
+            var sanitized = new java.util.ArrayList<ItemStack>(remaining.size());
+            for (var stack : remaining) {
+                sanitized.add(stack == null ? ItemStack.EMPTY : stack);
+            }
+            remaining = List.copyOf(sanitized);
+        }
+
+        /** 不关心余料的旧写法。 */
+        public Match(ItemStack output, @Nullable ResourceLocation recipeId) {
+            this(output, recipeId, List.of());
+        }
     }
 
     /**

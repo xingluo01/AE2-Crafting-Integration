@@ -5,7 +5,11 @@
   "item.ae2_crafting_integration.wireless_terminal": "无线增广样板编码终端",
   "item.ae2_crafting_integration.augmented_crafting_pattern": "增广合成样板",
   "gui.ae2_crafting_integration.molecular_assembler": "通用分子装配室",
-  "gui.ae2_crafting_integration.augmented_pattern_terminal": "ME增广样板编码终端",
+  "gui.ae2_crafting_integration.augmented_pattern_encoding": "增广样板编码",
+  "gui.ae2_crafting_integration.assembler.workstations": "标志物栏",
   "gui.ae2_crafting_integration.jei.recipe_too_large": "这个配方超出 9x9 编码台",
-  "gui.ae2_crafting_integration.jei.incomplete_recipe": "配方缺少锻造所需的格子"
+  "gui.ae2_crafting_integration.jei.incomplete_recipe": "配方缺少锻造所需的格子",
+  "gui.ae2_crafting_integration.assembler.speed_cards": "加速卡：%s 张",
+  "gui.ae2_crafting_integration.pattern.workstation": "标志物",
+  "gui.ae2_crafting_integration.pattern.workstation.none": "不要求"
 }

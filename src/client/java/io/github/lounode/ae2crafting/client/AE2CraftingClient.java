@@ -5,6 +5,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.client.event.EntityRenderersEvent;
+import net.neoforged.neoforge.client.event.ModelEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 
 import guideme.Guide;
@@ -14,6 +16,8 @@ import guideme.PageAnchor;
 import io.github.lounode.ae2crafting.AE2CraftingIntegration;
 import io.github.lounode.ae2crafting.client.gui.AugmentedPatternEncodingTermScreen;
 import io.github.lounode.ae2crafting.client.gui.MolecularAssemblerScreen;
+import io.github.lounode.ae2crafting.client.render.MolecularAssemblerRenderer;
+import io.github.lounode.ae2crafting.registry.ModBlockEntities;
 import io.github.lounode.ae2crafting.registry.ModMenuTypes;
 
 /**
@@ -43,6 +47,8 @@ public class AE2CraftingClient {
 
     public AE2CraftingClient(IEventBus modBus) {
         modBus.addListener(this::registerScreens);
+        modBus.addListener(this::registerRenderers);
+        modBus.addListener(this::registerAdditionalModels);
 
         this.guide = Guide.builder(GUIDE_ID)
                 .folder("ae2guide")
@@ -55,6 +61,27 @@ public class AE2CraftingClient {
     private void registerScreens(RegisterMenuScreensEvent event) {
         event.register(ModMenuTypes.MOLECULAR_ASSEMBLER.get(), MolecularAssemblerScreen::new);
         event.register(ModMenuTypes.AUGMENTED_PATTERN_TERMINAL.get(), AugmentedPatternEncodingTermScreen::new);
+    }
+
+    /**
+     * 装配室的呼吸灯与产物浮空动画走方块实体渲染器。
+     *
+     * <p>AE2 只给自家 {@code MolecularAssemblerBlockEntity} 挂了渲染器，本模组是另一个方块实体类型，
+     * 必须自己登记；漏了不报错，只是灯永远不亮、产物永远不浮起来。</p>
+     */
+    private void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
+        event.registerBlockEntityRenderer(ModBlockEntities.MOLECULAR_ASSEMBLER.get(),
+                MolecularAssemblerRenderer::new);
+    }
+
+    /**
+     * 呼吸灯的模型不在 blockstate 里，是独立的一份 {@code block/molecular_assembler_lights}，
+     * 由渲染器按 {@link MolecularAssemblerRenderer#LIGHTS_MODEL} 直接取。AE2 也用它自己的
+     * {@code InitAdditionalModels} 走同一个「额外模型」通道；不登记的话
+     * {@code getModel} 拿到的是 missing model（紫黑方块）。
+     */
+    private void registerAdditionalModels(ModelEvent.RegisterAdditional event) {
+        event.register(MolecularAssemblerRenderer.LIGHTS_MODEL);
     }
 
     /** 指南书本体，留给后续做「手持指南物品」或调试命令时取用。 */

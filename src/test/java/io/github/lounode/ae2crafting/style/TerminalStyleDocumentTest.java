@@ -226,18 +226,46 @@ class TerminalStyleDocumentTest {
     }
 
     /**
-     * 标题走本模组自己的语言键。留着 {@code gui.ae2.Terminal} 的话，界面上会直接显示
-     * AE2 的「终端」，和物品名对不上。
+     * 标题用 AE2 的通用「终端」，编码区左上角另有一行本模组自己的「增广样板编码」。
+     * 后者是本模组新加的语言键，两种语言都得有，否则界面上会直接显示原始 key。
      */
     @Test
-    void dialogTitleUsesOurOwnLangKey() throws Exception {
-        String key = style.getAsJsonObject("text").getAsJsonObject("dialog_title")
+    void dialogTitleUsesAe2GenericTerminalKey() throws Exception {
+        JsonObject text = style.getAsJsonObject("text");
+        String dialog = text.getAsJsonObject("dialog_title")
                 .getAsJsonObject("text").get("translate").getAsString();
-        assertEquals("gui.ae2_crafting_integration.augmented_pattern_terminal", key);
+        assertEquals("gui.ae2.Terminal", dialog);
 
+        String gridTitle = text.getAsJsonObject("crafting_grid_title")
+                .getAsJsonObject("text").get("translate").getAsString();
+        assertEquals("gui.ae2_crafting_integration.augmented_pattern_encoding", gridTitle);
         for (String lang : new String[] { "zh_cn", "en_us" }) {
-            assertTrue(readLang(lang).has(key), lang + " 缺少 " + key);
+            assertTrue(readLang(lang).has(gridTitle), lang + " 缺少 " + gridTitle);
         }
+    }
+
+    /**
+     * 无线形态的升级槽改走 AE2WTLib 的 ScrollingUpgradesPanel：AE2 那一份必须挪出屏幕，
+     * 滚动面板与滚动条要按 206 宽的界面换算回 AE2 的标准落点（面板 x=193、滚动条 x=212）。
+     *
+     * <p>「可见行数固定 2」写在 {@code AugmentedPatternEncodingTermScreen#init} 里，
+     * 纯 JUnit 不加载客户端类，这里只锁它依赖的布局；改成随窗口高度变化时要同步改这条注释。</p>
+     */
+    @Test
+    void scrollingUpgradePanelKeepsTheStandardAnchor() {
+        JsonObject widgets = style.getAsJsonObject("widgets");
+
+        JsonObject legacy = widgets.getAsJsonObject("upgrades");
+        assertEquals(-9999, legacy.get("left").getAsInt(), "AE2 的 UpgradesPanel 必须挪出屏幕，否则会画两份");
+        assertEquals(-9999, legacy.get("top").getAsInt());
+
+        JsonObject panel = widgets.getAsJsonObject("scrollingUpgrades");
+        assertEquals(13, panel.get("right").getAsInt(), "206 宽界面下 right:13 才等于 AE2 的 x=193");
+        assertEquals(0, panel.get("top").getAsInt());
+
+        JsonObject scrollbar = widgets.getAsJsonObject("upgradeScrollbar");
+        assertEquals(-6, scrollbar.get("right").getAsInt(), "206 宽界面下 right:-6 才等于 AE2 的 x=212");
+        assertEquals(6, scrollbar.get("top").getAsInt());
     }
 
     private static void assertSlotOnArt(JsonObject slots, String name, int expectedLeft, int expectedBottom) {

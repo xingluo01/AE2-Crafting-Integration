@@ -5,6 +5,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 
 import io.github.lounode.ae2crafting.integration.ModIntegrations;
+import io.github.lounode.ae2crafting.integration.ae2wtlib.WutTerminals;
 import io.github.lounode.ae2crafting.registry.ModBlockEntities;
 import io.github.lounode.ae2crafting.registry.ModBlocks;
 import io.github.lounode.ae2crafting.registry.ModCapabilities;
@@ -36,6 +37,8 @@ public final class AE2CraftingIntegration {
         ModCreativeTabs.TABS.register(modBus);
         ModBlockEntities.BLOCK_ENTITIES.register(modBus);
         ModMenuTypes.MENUS.register(modBus);
+        // WUT 登记必须早于 ae2wtlib_api 的 RegisterEvent(ITEM)，见 WutTerminals 类注释。
+        WutTerminals.register();
         // 模组总线事件，不能用 @EventBusSubscriber 默认的游戏总线挂，原因见 ModCapabilities 类注释。
         modBus.addListener(ModCapabilities::register);
         modBus.addListener(this::commonSetup);

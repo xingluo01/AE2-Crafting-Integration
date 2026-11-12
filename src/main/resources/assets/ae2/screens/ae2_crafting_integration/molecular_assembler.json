@@ -49,6 +49,26 @@
         "left": 8,
         "top": 6
       }
+    },
+    "workstation_title": {
+      "$comment": "标志物栏左上角标题：栏位 top=198，标题贴着它上沿留 11px 空隙。",
+      "text": {
+        "translate": "gui.ae2_crafting_integration.assembler.workstations"
+      },
+      "position": {
+        "left": 8,
+        "top": 187
+      }
+    },
+    "player_inventory_title": {
+      "$comment": "玩家物品栏左上角标题，沿用原版 container.inventory，与标志物栏标题对仗。",
+      "text": {
+        "translate": "container.inventory"
+      },
+      "position": {
+        "left": 8,
+        "top": 219
+      }
     }
   },
   "images": {
@@ -76,7 +96,7 @@
       ]
     },
     "slotBackground": {
-      "$comment": "复用本图背包栏第一格的槽底：16x16，顶 1px 深线，与 AE2 Icon.SLOT_BACKGROUND 同规格",
+      "$comment": "仅供贴图像素对照（StyleDocumentTest 锁它的坐标），运行时不再引用：9x9 槽底已改由 IOptionalSlot 交给 AEBaseScreen 用 Icon.SLOT_BACKGROUND 按 1.0/0.2 alpha 绘制",
       "texture": "ae2_crafting_integration:textures/guis/molecular_assembler.png",
       "textureWidth": 512,
       "textureHeight": 512,

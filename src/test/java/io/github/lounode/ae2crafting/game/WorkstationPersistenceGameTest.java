@@ -19,6 +19,7 @@ import appeng.menu.locator.MenuLocators;
 
 import io.github.lounode.ae2crafting.AE2CraftingIntegration;
 import io.github.lounode.ae2crafting.common.item.WirelessAugmentedPatternTerminalHost;
+import io.github.lounode.ae2crafting.common.menu.AugmentedPatternEncodingTermMenu;
 import io.github.lounode.ae2crafting.registry.ModItems;
 
 /**
@@ -89,6 +90,41 @@ public class WorkstationPersistenceGameTest {
         var restored = second.getWorkstationInventory().getStack(0);
         helper.assertTrue(restored != null && workstation.equals(restored.what()),
                 "重开宿主后标志物变了：" + restored + "，期望 " + workstation);
+        helper.succeed();
+    }
+
+    /**
+     * 清除按钮必须连标志物一起清，而且清完要落盘。
+     *
+     * <p>只清 81 格编码网格、漏掉宿主那一格时，界面上工作台还在；更隐蔽的是没触发
+     * changeListener 的话，就算把内存里的格子置空，关窗重开又会从 {@code CUSTOM_DATA}
+     * 读回来。这里用重建宿主模拟一次关窗重开，把两种漏法一起挡住。</p>
+     */
+    @GameTest(template = "empty")
+    public void clearButtonWipesWorkstationAndPersists(GameTestHelper helper) {
+        var item = ModItems.WIRELESS_TERMINAL.get();
+        var stack = new ItemStack(item);
+        var player = helper.makeMockPlayer(GameType.SURVIVAL);
+        var locator = MenuLocators.forStack(stack);
+        var host = new WirelessAugmentedPatternTerminalHost(item, player, locator, (p, menu) -> {
+        });
+        var menu = new AugmentedPatternEncodingTermMenu(0, player.getInventory(), host);
+
+        var workstation = AEItemKey.of(Blocks.CRAFTING_TABLE);
+        host.getWorkstationInventory().setStack(0, new GenericStack(workstation, 1));
+        var grid = menu.getLogic().getEncodedInputInv();
+        grid.setStack(0, new GenericStack(AEItemKey.of(Blocks.STONE), 1));
+
+        menu.clear();
+
+        helper.assertTrue(grid.getStack(0) == null, "清除后 9x9 编码网格还有东西");
+        helper.assertTrue(host.getWorkstationInventory().getStack(0) == null,
+                "清除后标志物槽还有东西");
+
+        var reopened = new WirelessAugmentedPatternTerminalHost(item, player, locator, (p, m) -> {
+        });
+        helper.assertTrue(reopened.getWorkstationInventory().getStack(0) == null,
+                "关窗重开后标志物又回来了：清除没有写进物品 CUSTOM_DATA");
         helper.succeed();
     }
 }

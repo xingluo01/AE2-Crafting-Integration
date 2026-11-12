@@ -49,7 +49,10 @@ public final class AvaritiaTableMatcher implements GridMatcher {
         for (var holder : level.getRecipeManager().getAllRecipesFor(type)) {
             var recipe = holder.value();
             if (recipe.matches(input, level)) {
-                return new Match(recipe.assemble(input, level.registryAccess()), holder.id());
+                // 余料按台面尺寸返回（这张台是 size×size 的居中表），按同一套中心偏移摊回 9×9。
+                var remaining = bounds.scatterCentered(recipe.getRemainingItems(input),
+                        width, height, table.size(), table.size(), ItemStack.EMPTY);
+                return new Match(recipe.assemble(input, level.registryAccess()), holder.id(), remaining);
             }
         }
         return null;

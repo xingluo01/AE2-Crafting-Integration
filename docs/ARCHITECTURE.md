@@ -1,6 +1,6 @@
 # 架构
 
-当前已落地基线三件套与 9x9 装配室的容器/界面骨架，方块实体已接进 AE2 的基类与能力面（网格节点可被发现、物品能力可被管道读写），并接上了 4 格升级槽与 AE2 标准的加速卡；9x9 配方匹配（含合成拓展与无尽的工作台）与样板编码终端已落地，装配室按样板执行与 ME 合成交互尚未实现。改代码前先读完本页。
+当前已落地基线三件套与 9x9 装配室的容器/界面骨架，方块实体已接进 AE2 的基类与能力面（网格节点可被发现、物品能力可被管道读写），并接上了 4 格升级槽与 AE2 标准的加速卡；9x9 配方匹配（含合成拓展与无尽的工作台）与样板编码终端已落地，装配室已按样板执行并接上样板供应器发配、产物回网、呼吸灯与浮空产物渲染。改代码前先读完本页。
 
 ## 基线
 
@@ -59,10 +59,11 @@ AE2 的机器不是「实现个接口就自动接上」：基类负责建方块�
 当前登记的能力：
 
 - `AECapabilities.IN_WORLD_GRID_NODE_HOST` → 方块实体自身（`IGridConnectedBlockEntity extends IInWorldGridNodeHost`）。
+- `AECapabilities.CRAFTING_MACHINE` → 方块实体自身（`ICraftingMachine`）。**这条是样板供应器能发现本机的唯一通道**：供应器侧走 `ICraftingMachine.of(level, pos, side)` 扫描六面，查的就是这个能力；漏登记的表现不是报错，而是「供应器只认 AE2 自己的装配室」。
 - `Capabilities.ItemHandler.BLOCK` → `getExposedInventory()`：催化剂栏 `81..89` + 产物槽 `90`，9x9 网格不对自动化开放；产物槽由 `AssemblerInventory#isItemValid` 保证只出不进。
-- **AE2 只会给 `AEBlockEntities` 自己的类型批量登记能力**（见 `InitCapabilityProviders`），新增方块实体时必须同步补 `ModCapabilities`，否则上面两条一条都不会生效。
+- **AE2 只会给 `AEBlockEntities` 自己的类型批量登记能力**（见 `InitCapabilityProviders`），新增方块实体时必须同步补 `ModCapabilities`，否则上面几条一条都不会生效。
 
-尚未适配，按落地顺序：`ICraftingMachine`（样板供应器推配方）、`IGridTickable`（进度推进与节点休眠）、`AECapabilities.GENERIC_INTERNAL_INV`（通用仓）。
+`AECapabilities.GENERIC_INTERNAL_INV` 没有登记：那是通用仓（气体/源质之类）的通道，本机只处理物品。产物回网走的是**对面供应器**的通用内部仓，不需要本机暴露。
 
 方块掉落由 `data/ae2_crafting_integration/loot_table/blocks/molecular_assembler.json` 提供，内部 91 格由 `AEBaseEntityBlock#onRemove` → `addAdditionalDrops`（继承自 `AEBaseInvBlockEntity`）掉落。**缺战利品表时方块破坏后什么都不掉**；1.21 的目录名是单数 `loot_table`。
 
@@ -93,6 +94,83 @@ AE2 的机器不是「实现个接口就自动接上」：基类负责建方块�
 
 升级库存**不参与** `getInternalInventory()`，必须在 `saveAdditional`/`loadTag` 里单独 `writeToNBT`/`readFromNBT("upgrades")`；漏了只是重启后卡片消失，不报错。
 
+**无线终端的升级槽**是另一套：`ItemMenuHost` 自带固定 2 格的 `DelegateItemUpgradeInventory`，槽数不能也不该改。`ModUpgrades.register()` 里按注册名登记 `2 × AEItems.ENERGY_CARD` 与 `1 × ae2wtlib:quantum_bridge_card`（后者按 `BuiltInRegistries.ITEM.get(...)` 取，不要编译期引用 ae2wtlib 本体类）。登记上限是「最多能装几张」，与槽位数 2 是两件事，别混。
+
+**快捷移动优先级**：`AEBaseMenu#getQuickMoveDestinationSlots` 按 `SlotSemantic#quickMovePriority()` 倒序排目标槽，而 `SlotSemantics.UPGRADE` 默认是 0，与机器自己的标志物栏同分——背包里 Shift 点加速卡会被「什么都收」的标志物栏截胡。`MolecularAssemblerMenu#getQuickMovePriority` 给 UPGRADE 单独抬到 100；其它物品在升级槽的 `RestrictedInputSlot` 被拒后仍按原顺序落进标志物栏。`AssemblerAutomationGameTest#speedCardsQuickMoveIntoUpgradeSlotsFirst` 锁这条。
+
+## 装配室执行模型
+
+`MolecularAssemblerBlockEntity` 同时实现 `ICraftingMachine` / `IGridTickable` / `IPowerChannelState`，三件事分别对应「接活」「干活」「亮灯」，一个都不自造。范式逐条对照 AE2 的 `MolecularAssemblerBlockEntity`，差别只在样板类型与网格尺寸。
+
+```
+样板供应器 PatternProviderLogic#pushPattern
+  → ICraftingMachine.of(level, pos, side) 找到本机
+  → acceptsPlans()?           有活就说不接，供应器直接试下一台
+  → pushPattern(pattern, KeyCounter[] table, where)
+       ├─ 本机空闲 && 网格为空
+       ├─ 样板是本模组的 AugmentedPattern
+       ├─ 标志物栏里有这张样板要的工作台   ← 准入门槛，见下
+       └─ fillGrid 按样板铺格（任一格失败即回滚）
+  → 节点被 wakeDevice，IGridTickable 每 tick 推进 progress
+  → progress >= 100 → finishCraft → 清网格 / 回填余料 / 产物推回 where 那一侧
+  → 节点 sleepDevice，等下一份
+```
+
+四条硬性约定：
+
+1. **`table` 的顺序是「非空格的行优先」，不是 81 格下标**。`KeyCounter[]` 与样板 `getInputs()` 一一对应，铺格时按下标递增消费；铺完每个计数器必须 `removeZeros()` 后为空，否则说明有输入没落地——这时候把已铺的收回去，绝不带着半份原料开机。
+2. **`pushPattern` 一次决策到底**。标志物不对、网格不空、样板类型不对，都在这里返回 `false`，而不是先答应再去 tick 里反悔：供应器拿到 `false` 会去试下一台机器，拿到 `true` 就认为这活有人接了。
+3. **余料不自己算，重跑判定器**。`finishCraft` 拿 `snapshotGridItems()` + `stationFor(pattern)` 再问一次 `AugmentedRecipeMatcher`，用 `Match.remaining()` 逐格回填——空桶、无尽的不消耗催化剂都在那里。重跑同时是一道保险：配方被数据包删掉时不吞原料。
+4. **产物往 `where` 那一面推，不是随便找一面**。`InternalInventory.wrapExternal(level, pos.relative(where), where.getOpposite())` 拿到的就是供应器的回收库存（AE2 的 `InitCapabilityProviders#registerGenericAdapters` 把 `getReturnInv()` 的 `GENERIC_INTERNAL_INV` 转成了 `ItemHandler.BLOCK`），塞进去等于「还回 ME 网络」。推不出去才落产物槽，下一 tick 继续试；产物槽也被占就 `Containers.dropItemStack` 掉在机器旁边，绝不静默吞掉。
+
+### 标志物栏是准入门槛
+
+编码终端把标志工作方块写进了样板（`AugmentedPatternData#workstation`）。`pushPattern` 的前置条件里有一条 `hasRequiredWorkstation(pattern)`：
+
+- 样板不要工作台（原版 3×3 之类）→ 直接放行；
+- 要的话 → 标志物栏 `81..89` 里必须有**同一个 `AEItemKey`**（含组件，`AEItemKey.equals` 逐组件比），找不到就拒绝。
+
+`stationFor(pattern)` 专门处理「递什么给判定器」：样板不要工作台时返回 `ItemStack.EMPTY` 而不是随便拿一格。无尽的两条判定器只看标志物，递一个无关的台子过去会让它们抢答成另一个配方。
+
+**执行中被抽走标志物 = 暂停，不是作废**。`tick` 里再查一次 `hasRequiredWorkstation(plan)`，不满足就 `return SLEEP` 且一格原料都不动：原料是 ME 网络垫的，静默吞掉等于凭空丢东西；放回去就能接着做。
+
+### 节点休眠
+
+`getTickingRequest` 报 `!isAwake()`，`isAwake() = plan != null || 产物槽非空`。状态翻转时才 `wakeDevice`/`sleepDevice`（`updateSleepiness`），不是每 tick 都发命令——AE2 的 tick 管理器对重复命令有开销。空间上等价于 AE2 本体，但这里没有「待机功率」：`setIdlePowerUsage(0.0)`，频道与能耗由供应器那侧承担。
+
+**`tick(int)` 是公开方法**，`tickingRequest` 只是转调它。这样 GameTest 能直接驱动进度而不用构造一整套网格服务（见「测试」）。
+
+### 存档
+
+`plan` 以**物品形态**（`planItem`）落盘，`ensurePlan()` 在第一次用到时才 `PatternDetailsHelper.decodePattern` 解回来：`loadTag` 执行时世界还没赋给方块实体，那时解不出来。解码失败（改了注册名 / 删了模组）就丢掉 `planItem`，别让机器永远卡在「有活」状态。
+
+`pushDirection`、`progress`、`maxProgress` 一起存；`clearContent` 一并清空，否则拆掉方块会把「正在做的活」带进掉落物。
+
+## 装配室渲染
+
+两件事都是**客户端专属**，服务端只负责把状态塞进方块实体更新包：
+
+| 效果 | 数据来源 | 客户端实现 |
+|---|---|---|
+| 呼吸灯 | `powered`（`IPowerChannelState`，`onMainNodeStateChanged` 里算） | `MolecularAssemblerRenderer` 在方块中心画 `block/molecular_assembler_lights`，`RenderType.tripwire()` 全亮度 |
+| 浮空产物 | `animationOutput` / `animationSpeed` / `animationTick` | 同上，`getAnimationStatus()` 非空时画旋转产物 + `ParticleTypes.CRAFTING` 粒子 |
+
+三条硬性约定：
+
+1. **灯模型必须走 `ModelEvent.RegisterAdditional`**（`AE2CraftingClient#registerAdditionalModels`）。`ModelResourceLocation.standalone(MOD_ID, "block/molecular_assembler_lights")` 不在方块状态表里，不注册就是紫黑 missing model——而且只在实机出现，编译期一切正常。
+2. **动画不单独发包**。AE2 本体用 `AssemblerAnimationPacket` + `PacketDistributor.sendToPlayersNear(..., 32, ...)`；本模组把「产物键 + 时间戳 + 速度」写进 `writeToStream`，客户端渲染器每帧问一次 `updateAnimationStatus()`，时间戳变化且距今 ≤ 20 tick 才新建 `AssemblerAnimationStatus`。少一条网络通道，代价是要自己判「这条更新包是不是新的一次合成」——`lastAnimationTick` 的比较是必需的，否则每次邻近方块更新都会重放动画。
+3. **`isPowered()` 与 `isActive()` 同源**。AE2 的 `AEBaseBlockEntity` 与部分渲染/线缆逻辑分别读这两个，返回不同值会出现「线缆是亮的、方块不亮」。
+
+### `@OnlyIn(Dist.CLIENT)` 的三条陷阱
+
+浮空产物这一小块踩满了客户端专属标记的坑，症状统一是 `NoSuchFieldError: ... does not have member field 'long lastAnimationTick'`，表现却是**整个方块实体在服务端加载不出来**（GameTest 里所有碰这台机器的用例一起红）。三条必须同时守住：
+
+1. **不带初始化器**。`private long x = 0;` 的赋值语句会被编译进**构造函数**，而构造函数没有 `@OnlyIn`、不会被剥离 → 服务端 `new` 的时候去 `putfield` 一个已不存在的字段。AE2 自己的 `animationStatus` 就是裸字段。
+2. **不被服务端也会执行的代码引用**。`readFromStream` 是其中之一：`AEBaseBlockEntity#loadAdditional` 解 `#upd` 时会在服务端调它。那边只许收普通字段。
+3. **判定放进 `@OnlyIn(CLIENT)` 的方法**（`updateAnimationStatus()`），调用方只在 `src/client` 的渲染器里。这样整个方法连同字段引用一起被剥掉，服务端不留悬空引用。
+
+顺带一条相关的：`AssemblerAnimationStatus` 与 `getAnimationStatus()` 都是客户端专属，**服务端代码（含 GameTest）不能碰**，调用点会被运行时剥离，直接 `NoSuchMethodError`。
+
 ## 菜单与同步
 
 - `MolecularAssemblerMenu extends UpgradeableMenu<MolecularAssemblerBlockEntity> implements IProgressProvider`；槽位只按 `SlotSemantic` 注册，坐标不进 Java 代码。
@@ -100,7 +178,11 @@ AE2 的机器不是「实现个接口就自动接上」：基类负责建方块�
 - `AssemblerSlots` 只放数量与索引契约：81 网格（`0..80`）+ 9 催化剂（`81..89`）+ 1 产物（`90`），共 91 格。
 - **`@GuiSync(10)` = `progress`，`@GuiSync(11)` = `maxProgress`**。编号必须避开 `UpgradeableMenu` 已占用的 0 / 1 / 5 / 6（`rsMode` / `fzMode` / `cMode` / `schedulingMode`）；编号是客户端/服务端协议，不可复用、不可改。
 - `setupInventorySlots()` 只加机器自己的 91 格；玩家背包与升级槽由 `UpgradeableMenu` 的构造统一加，**子类再调 `createPlayerInventorySlots` 会直接抛「already created」**。
-- 进度值由 `MolecularAssemblerBlockEntity` 持久化，目前恒 0；配方逻辑接入后按 `getProgressPerTick()` 推进，界面的进度条无需再改。
+- 进度值由 `MolecularAssemblerBlockEntity` 持久化并按 `getProgressPerTick()` 推进，界面的进度条无需再改。
+- **9×9 网格槽用 `AssemblerGridSlot`（`AppEngSlot` 子类），只由供应器填、只由机器自己清**：`mayPlace` / `mayPickup` 恒 `false`，`isSlotEnabled()` 按「这一格现在有没有东西」算。理由是网格是配方的**位置**，手动挪一格就等于换了个配方，机器却还按旧样板推进度，产物必然对不上。
+  - 客户端 `AEBaseScreen` 只对 `IOptionalSlot` 自动压暗，普通 `AppEngSlot` 不处理，所以界面侧要自己在 `drawBG` 里给 `!isSlotEnabled()` 的格子叠一层 `0x55000000`（`MolecularAssemblerScreen#drawGridSlots`）。
+  - **不能用 `getItem()` 判空**：父类 `AppEngSlot#getItem()` 先问 `isSlotEnabled()`，那样是无限递归。要读就 `getInventory().getStackInSlot(getSlotIndex())`。
+- 标志物栏 `81..89` 是配置槽，保持可手动放入——机器靠它决定「本机扮演哪张工作台」，没有它就没法在 `pushPattern` 里拒绝不该接的样板。
 - `quickMoveStack` 与 `stillValid` 直接继承 `AEBaseMenu` 的实现。
 
 ## 编码终端
@@ -132,7 +214,9 @@ AE2 的机器不是「实现个接口就自动接上」：基类负责建方块�
 - 所有固定部件（9×9 网格、产物槽、样板槽、按钮）在 JSON 里一律用 `bottom`（离底边的距离）定位，`imageHeight` 变了也跟着走；写 `top` 的话窗口一变高就会被重复行压在网格中间；
 - 贴图是 **512×512** 画布，`Blitter` 的 `srcRect` 默认按 256 归一化 UV，所以五片都必须显式写 `textureWidth/Height: 512`。
 
-这一版面板是 206 宽：主体仍是 195（x 0..194），右侧挂带凸出到 x=205，只存在于 `bottom` 那一段（y 84..250）。因此 `bottom` 必须写 206——`MEStorageScreen#getScreenWidth()` 取五片 `srcWidth` 的**最大值**当界面宽度，少一像素就把挂带右边那条描边切掉，多一像素则界面无谓变宽、`upgrades`（`right: 2`）跟着外移。挂带左边框（x=168）同时是 9×9 网格块的右边框：9 格按 18 步进要 162，而贴图只画 160（`9×16 + 8×2`），多出的 2px 是末格的可点区域，不画东西——`TerminalStyleDocumentTest` 直接断言「末格右缘 = 168」。
+这一版面板是 206 宽：主体仍是 195（x 0..194），右侧挂带凸出到 x=205，只存在于 `bottom` 那一段（y 84..250）。因此 `bottom` 必须写 206——`MEStorageScreen#getScreenWidth()` 取五片 `srcWidth` 的**最大值**当界面宽度，少一像素就把挂带右边那条描边切掉。
+
+**但界面宽度变成 206 后，一切用 `right` 定位的部件都会偏 11px**：`Position.resolve` 对 `right` 只算 `imageWidth - right`，`common.json` 的 `right: 2` 在 AE2 的 195 宽界面上是 x=193，在我们这里变成 x=204。所以本文件把 `widgets.upgrades`（AE2 的 `UpgradesPanel`，由 `MEStorageScreen` 无条件注册）挪到 `(-9999,-9999)` 藏起来，改由 `scrollingUpgrades: right 13`（→ x=193）与 `upgradeScrollbar: right -6`（→ x=212）接管——两个值都是把 AE2WTLib 在 195 宽界面上的落点换算到 206 宽后的结果。`TerminalStyleDocumentTest#scrollingUpgradePanelKeepsTheStandardAnchor` 锁这三个位置。面板形态没有升级槽，藏起来对它无影响。挂带左边框（x=168）同时是 9×9 网格块的右边框：9 格按 18 步进要 162，而贴图只画 160（`9×16 + 8×2`），多出的 2px 是末格的可点区域，不画东西——`TerminalStyleDocumentTest` 直接断言「末格右缘 = 168」。
 
 槽位原点一律取 **16×16 内容区的左上角**，不是外框原点：18×18 的框取 `+1`，24×24 的框取 `+4`（16×16 居中）。这不是估的——AE2 自己的编码终端把 `BLANK_PATTERN` 写在 `(147,86)`，而它 `guis/pattern.png` 里那个框画在 `(146,85)`，正好差 1；`CRAFTING_GRID` 的 `(15,93)` 同样落在格内首行。9×9 编码格因为格内自带 1px 顶线、又没有左边框，原点是 `(8,87)`（内容区就是 8..23 × 87..102）。
 
@@ -140,14 +224,47 @@ AE2 的机器不是「实现个接口就自动接上」：基类负责建方块�
 
 编写样板按钮在新贴图里没有画框（AE2 的编码终端也一样，按钮是用 `ActionItems.ENCODE` 的图标直接盖在底色上），落点取空白样板槽与样板输出槽之间的空档，间距照 AE2 自己的节奏（按钮顶离空白槽 5px、离输出槽 11px）。
 
+**标题**：`text.dialog_title` 用 AE2 通用的 `gui.ae2.Terminal`（「终端」），不再写本模组的物品名；`text.crafting_grid_title` 用本模组自己的 `gui.ae2_crafting_integration.augmented_pattern_encoding`，`left 8 / bottom 271`，比 9×9 网格顶（`bottom 260`）高 11px，与 AE2 原版 `pattern_encoding_terminal.json` 的 `crafting_grid_title` 同节奏。用 `bottom` 而不是 `top`，物品行数随窗口高度变化时标题才跟着底块一起走。`TerminalStyleDocumentTest#dialogTitleUsesAe2GenericTerminalKey` 锁这两条键与两个 lang 文件。
+
+### 无线终端与 WUT 融合
+
+无线形态走 AE2WTLib 的体系，不再是「`WirelessTerminalItem` + 自建宿主」：
+
+| 组成 | 位置 | 职责 |
+|---|---|---|
+| `WirelessAugmentedPatternTerminalItem` | `common/item/` | `extends ItemWT`；带定位器/不带定位器的 `getMenuType()` 都指向 `AugmentedPatternEncodingTermMenu.TYPE`，`getMenuHost()` 直接返回本模组宿主 |
+| `WirelessAugmentedPatternTerminalHost` | `common/item/` | `extends WTMenuHost`；同时实现 `IPatternTerminalMenuHost` / `IPatternTerminalLogicHost` / `WorkstationHost`，编码台与标志物槽仍写物品 `CUSTOM_DATA` 的 `augmented_pattern_encoding` 根键 |
+| `WutTerminals` | `integration/ae2wtlib/` | 在模组构造期 `AddTerminalEvent.register(...)`，登记 `terminalName = "augmented_pattern_encoding"` 的 `WTDefinition` |
+| 4 条配方 | `data/ae2_crafting_integration/recipe/wireless_universal_terminal/` | 1 条 `ae2wtlib:upgrade`（WUT + 本终端）与 3 条 `ae2wtlib:combine`（分别与 crafting / pattern_encoding / pattern_access 组合出 WUT） |
+
+三条容易踩的坑：
+
+1. **不能只加配方 JSON**。`UpgradeSerializer` / `CombineSerializer` 都会 `WTDefinition.of(terminalName)`，而 `of` 是 `Objects.requireNonNull(wirelessTerminals.get(name))`——名字没登记过，配方加载阶段直接 NPE。先有 `WTDefinition`，再有配方。
+2. **`AddTerminalEvent.register` 必须早于 `RegisterEvent(ITEM)`**。它只是把回调存进列表，`ae2wtlib_api` 的 `AE2wtlibAPIEntrypoint` 在 `RegisterEvent(ITEM)` 里才 `run()`；回调执行时 `DeferredItem` 已绑定，`ModItems.WIRELESS_TERMINAL.get()` 可用。放到 `FMLCommonSetupEvent` 就太晚了，会抛 `Cannot register terminal registration handler after terminal registration already happened`。所以是**模组构造函数里注册**，不是 commonSetup。
+3. **这是硬依赖**。`ItemWT` / `WTMenuHost` 都是 `ae2wtlib_api` 的类，无线终端物品的继承链直接引用它们，缺了会在物品注册阶段 `NoClassDefFoundError`。`neoforge.mods.toml` 里把 `ae2wtlib` 声明成 `required`（它自己 required 依赖 `ae2wtlib_api`），让缺依赖时由加载器给出明确提示。`WTDefinitionBuilder#addTerminal` 还会顺手注册一枚 `has_augmented_pattern_encoding_terminal` 数据组件，`upgradeCount` 保持默认 2——与「槽位维持为 2」一致，别在这里改。
+
+### 升级槽滚动阈值固定 2
+
+WUT 每融合一个终端就多 2 个升级槽（`ItemWUT#getUpgrades` 是 `已安装终端数 × 2`），再加一格量子纠缠奇点；AE2 的 `UpgradesPanel` 只会越画越长，所以无线形态改走 AE2WTLib 的 `ScrollingUpgradesPanel`：
+
+| 环节 | 实现 |
+|---|---|
+| 界面 | `AugmentedPatternEncodingTermScreen implements IUniversalTerminalCapable`；`storeState()` / `isHandlingRightClick()` 父类已有，只需补 `getHost()` |
+| 面板 | 构造里 `addUpgradePanel(widgets, menu)`，仅在 `menu.isWirelessForm()` 为真时注册（面板形态没有 `WTMenuHost`）；`isWUT()` 时额外挂终端切换按钮、转发热键 |
+| **阈值** | `init()` 里 `upgradesPanel.setMaxRows(2)` ——**固定 2，不随窗口高度变化**；AE2WTLib 自带终端写的是 `Math.max(2, getVisibleRows())`，我们是按需求改成常量的 |
+| 奇点槽 | `AugmentedPatternEncodingTermMenu` 在宿主是 `WTMenuHost` 时补一个 `PlacableItemType.QE_SINGULARITY` 槽，语义用 `AE2wtlibSlotSemantics.SINGULARITY`。它是面板列表的第一格，没装量子桥卡且为空会被隐藏；漏了这格，面板会把第一个普通升级槽误当奇点槽 |
+| 布局 | AEjson 把 `widgets.upgrades` 挪到 `(-9999,-9999)`，另给 `scrollingUpgrades` / `upgradeScrollbar` 两个 widget 位置，照 `ae2wtlib_api` 的 `screens/wtlib/universal_terminal.json` |
+
+`ScrollingUpgradesPanel#setMaxRows(int)` 是公开 API，`maxRows` 默认 2；`scrolling()` 判「可见槽数 > maxRows」，滚动条范围 `0 .. 槽数 - 可见槽数`。**阈值不是配置项**——AE2WTLib 的配置只有 `magnetCardRange` 与 `alwaysShowTerminalSelector`，要改只能在界面代码里调 `setMaxRows`。另外它是**整个面板一个阈值**，不按融合进来的终端分别设；每个终端只能通过 `WTDefinitionBuilder#upgradeCount` 影响「每种卡最多装几张」，不影响 WUT 的槽数（那里写死 ×2）。
+
 ## 9x9 配方匹配
 
-编码终端的产物预览与（以后的）装配室共用 `common/logic/AugmentedRecipeMatcher`：判定器排成一条链，**第一个非 `null` 的结果获胜**。原版合成台是内置的第一条，邻居的工作台由 `integration/*` 追加。
+编码终端的产物预览与装配室的合成收尾共用 `common/logic/AugmentedRecipeMatcher`：判定器排成一条链，**第一个非 `null` 的结果获胜**。原版合成台是内置的第一条，邻居的工作台由 `integration/*` 追加。
 
 | 类 | 位置 | 职责 |
 |---|---|---|
-| `GridBounds` | `common/logic/` | record：非空格的最小外接矩形 + 裁出来 + **居中铺进目标网格** |
-| `GridMatcher` | `common/logic/` | 接口：整张网格 + 尺寸（+ 可选标志工作方块）→ `Match(output, recipeId)` 或 `null` |
+| `GridBounds` | `common/logic/` | record：非空格的最小外接矩形 + 裁出来 + **居中铺进目标网格** + 两个逆运算 `scatter` / `scatterCentered` |
+| `GridMatcher` | `common/logic/` | 接口：整张网格 + 尺寸（+ 可选标志工作方块）→ `Match(output, recipeId, remaining)` 或 `null` |
 | `AugmentedRecipeMatcher` | `common/logic/` | 判定器链、`registerIntegration`、`GenericStack` 快照 → 物品表 |
 | `*TableMatcher` | `integration/<邻居>/` | 合成拓展 / 无尽的表格配方 |
 | `AvaritiaWorkstations` | `integration/avaritia/` | 标志工作方块 → 网格边长与 tier（`ModBlocks` 比较） |
@@ -160,6 +277,8 @@ AE2 的机器不是「实现个接口就自动接上」：基类负责建方块�
 2. **tier 由标志物决定，不是从网格猜**。合成拓展的 `ShapedTableRecipe#matches` 与无尽的 `ShapedTableCraftingRecipe#matches` 都写成 `recipe.tier != 0 && recipe.tier != input.tier() → false`，是**等值**不是「不低于」。所以 `GridMatcher` 有一个带 `ItemStack station`（标志工作方块）的五参重载，默认实现忽略它并转给四参版本——原版与合成拓展零改动。没放标志物时，需要 tier 的判定器返回 `null`，不猜档位。
 3. **`GridBounds.of` 的空格判定是参数，不是写死的 `ItemStack::isEmpty`**。纯 JUnit 里 `ItemStack` 连静态初始化都会抛 `ExceptionInInitializerError`（`ItemStack.EMPTY` 依赖物品注册表），写死一个单测都跑不起来。`ofItems` 只是套了一层；测试用字符串列表验裁法。`null` 元素一律按空格处理（`ConfigInventory#getStack` 对空格返回的就是 `null`）。
 4. **预览与编码各算一次**。`encode()` 重跑匹配而不复用每 tick 的预览缓存：按钮点击与缓存之间可能隔着一次未广播的槽位改动。多算一次匹配远比编出错样板便宜。
+5. **余料必须回到它来的那一格**。`Match` 除了产物与配方 id 还带 `remaining`，长度恒等于整张网格；判定器算完 `recipe.getRemainingItems(...)` 后要用 `GridBounds#scatter`（按裁剪偏移摊回原网格）或 `scatterCentered`（按目标台尺寸摊回）铺回去。装配室靠它逐格回填，空桶、无尽的不消耗催化剂都在这条路上；少了它，一次合成就把催化剂和桶全吞了。
+6. **`scatter` 不是 `crop` 的近似逆运算，是严格逆**：`crop` 取出包围盒内的 `width×height`，`scatter` 把定长列表按同一个 `fromX/fromY` 摊回 `gridWidth×gridHeight`，两个方向共用同一套行列换算。`scatterCentered` 同理对应 `centerIn`，单测用「裁剪再摊回 == 原图」把它钉死。
 
 ### 无尽重生（Re-Avaritia）
 
@@ -261,14 +380,14 @@ ImmutableTable<Class<? extends AbstractContainerMenu>, RecipeType<?>, IRecipeTra
 | 玩家背包 | `7, 229, 162, 54` | `PLAYER_INVENTORY` | `8, 230`，`BREAK_AFTER_9COLS` |
 | 玩家快捷栏 | `7, 287, 162, 18` | `PLAYER_HOTBAR` | `8, 288`，`HORIZONTAL` |
 | 右挂浮层 | `176, 134, 34, 50` | `images.sidePanel` / `widgets.sidePanel` | `176, 134`（由 `drawBG` 补画） |
-| 槽底 sprite | `8, 230, 16, 16` | `images.slotBackground` | 按各 `Slot.x/y` 平铺 |
+| 槽底 sprite（仅供像素对照） | `8, 230, 16, 16` | `images.slotBackground` | 运行时已不再平铺，见下 |
 
 - 槽框 `18×18` 含 `1px` 边框，真实可放物品区 `16×16`；Java 里 `Slot.x/y` 是图标左上角，所以比槽框左上角各 `+1`。
-- 进度条：`images.progressBar` 取贴图 UV `[176, 0, 18, 6]`（贴图右上角那条 18×6 的 sprite，位置不随浮层移动），`widgets.progressBar` 落在 `181, 169`，方向 `HORIZONTAL`。底槽 `181, 169, 18, 6` 已画在浮层贴图里，不需要单独渲染。
+- 进度条：`images.progressBar` 取贴图 UV `[176, 0, 18, 6]`（贴图右上角那条有方向竖纹的 18×6 sprite），`widgets.progressBar` 落在 `181, 169`。底槽 `181, 169, 18, 6` 已画在浮层贴图里，不需要单独渲染。**不要用 AE2 的 `ProgressBar` 直接画**：它对水平方向算 `srcX += width - filled`，取的是 sprite 的右侧一段，纹路会随进度往左滑，看着像整条在平移。`client/gui/widgets/CoveringProgressBar` 固定 `srcX`、只把 `srcWidth` 裁成 `filled`，才是「从左往右逐渐覆盖」。tooltip 走 `ProgressBar#setFullMsg`，由 `MolecularAssemblerScreen#updateBeforeRender` 每帧写 `current * 100 / max + "%"`——与 AE2 原版分子装配室一致，只是按 `max` 折算而不是把进度值直接当百分数。
 - 升级面板：4 张加速卡竖排一列，`UpgradesPanel#getBounds` 算出的面板是 `28×82`（`10 + 4*18`）。位置**照 AE 原样写 `right: 2 / top: 0`**：`Position.resolve` 对 `right` 只算 `imageWidth - right`（**不减面板宽度**），所以左缘 = `176 - 2 = 174`，面板左侧 2px 压在主面板右边框上、其余 26px 挂在外面——AE2 各机器就是这个「半嵌在侧边」的落法。别改写成 `left`（早先的 `left:212` 会让面板整块飘在右边）；网格最右列到 `167` 为止，`174` 不会压槽位。面板占 `174..201 × 0..82`，底边到浮层 `y=134` 还有 52px。
-- 9x9 网格在贴图里是空白底板，81 个槽底由 `MolecularAssemblerScreen#drawBG` 平铺 `images.slotBackground` 补画：16×16、顶 1px `(154,159,180)`、填充 `(173,176,196)`，与 AE2 `Icon.SLOT_BACKGROUND` 同规格。**不要**用 `graphics.fill` 画 18×18 四边框——那会盖掉底板的 `(203,204,212)`，相邻边框还会叠成 2px 深线。`AEBaseScreen#renderBg` 是 final，子类只能用 `drawBG`。
+- **9x9 槽底不要自己画**。贴图那一块是空白底板，但槽位策略完全照 AE2 原版分子装配室：`AssemblerGridSlot extends AppEngSlot implements IOptionalSlot`，`isRenderDisabled()` 恒真、`getBackgroundPos()` 返回 `(x-1, y-1)`（18×18 的 `Icon.SLOT_BACKGROUND` 比 16×16 内容区各外扩 1px）。`AEBaseScreen#renderBg` 会按 `isSlotEnabled() ? 1.0 : 0.2` 的 alpha 给每一格画槽底——没被样板填的格子几乎隐形，填了料的才显出完整槽框。之前在 `drawGridSlots` 里平铺 `images.slotBackground` + 叠一层 `0x55000000` 纯黑的做法比原版重、也不够美观，已删除。`images.slotBackground` 只留作 `StyleDocumentTest` 的贴图像素对照，运行时不再引用。注意 `AEBaseScreen#renderBg` 是 final，子类只能用 `drawBG`（现在只补画右侧浮层）。
 - 浮层与背景分开画，`imageWidth` 仍是 `176`（由 `background.srcRect` 决定），所以输出槽 `x=182` 会落在主面板右缘之外，这是贴图设计，不是坐标越界。
-- 标题 `dialog_title` 固定 `left 8 / top 6`，与 AE2 全系一致；新留白下标题区 `y=1..16` 仍容得下 9px 字高。
+- 标题 `dialog_title` 固定 `left 8 / top 6`，与 AE2 全系一致；新留白下标题区 `y=1..16` 仍容得下 9px 字高。标志物栏与玩家物品栏左上角各补一行标题（`workstation_title` @ `left 8 / top 187`、`player_inventory_title` @ `left 8 / top 219`，后者直接用原版 `container.inventory`），位置贴在各自栏位上沿，别写进贴图——AEjson 的 `text` 会随语言切换。
 - 布局口径：美术交付说明里的「玩家快捷栏 `7, 198`」与催化剂栏 `208` 重叠，按贴图实测边框应为 **`7, 298`**。
 
 ## 指南书与左侧按钮
@@ -287,25 +406,41 @@ AE2 的合成样板只能表达 3×3：它把**配方 id** 存进组件，解码
 
 | 组成 | 位置 | 职责 |
 |---|---|---|
-| `AugmentedPatternData` | `common/pattern/` | record：`width` / `height` / 行优先 `grid`（空格为 `null`）/ `outputs` + Codec 与 StreamCodec |
-| `AugmentedPattern` | `common/pattern/` | `IPatternDetails` 实现，每格展开成一个 `IInput`，倍率取该格数量 |
+| `AugmentedPatternData` | `common/pattern/` | record：`width` / `height` / 行优先 `grid`（空格为 `null`）/ `outputs` / `workstation` + Codec 与 StreamCodec |
+| `AugmentedPattern` | `common/pattern/` | `IPatternDetails` 实现，每格展开成一个 `IInput`，倍率取该格数量；`groupedInputs()` 把相同物品合并并记下坐标，供 tooltip 用 |
+| `AugmentedPatternItem` | `common/item/` | `extends EncodedPatternItem<AugmentedPattern>`，覆写 `appendHoverText` 自定义排版 |
 | `ModDataComponents` | `registry/` | `augmented_pattern` 组件，`persistent` + `networkSynchronized` 两条都要 |
-| `ModItems.AUGMENTED_CRAFTING_PATTERN` | `registry/` | 由 `PatternDetailsHelper.encodedPatternItemBuilder` 生成的 `EncodedPatternItem` |
+| `ModItems.AUGMENTED_CRAFTING_PATTERN` | `registry/` | 注册 `AugmentedPatternItem` 实例 |
 
-三条硬性约定：
+五条硬性约定：
 
-1. **样板物品必须用 `PatternDetailsHelper.encodedPatternItemBuilder(...)` 生成**。AE2 的 `AEPatternDecoder` 只认 `EncodedPatternItem` 这个类型；自己写 `Item` 子类不会被 `isEncodedPattern` / `decodePattern` 看见，表现是「放进供应器不算样板」。
+1. **样板物品必须继承 `EncodedPatternItem`**。AE2 的 `AEPatternDecoder` 只认这个类型；换成普通 `Item` 子类不会被 `isEncodedPattern` / `decodePattern` 看见，表现是「放进供应器不算样板」。早期用 `PatternDetailsHelper.encodedPatternItemBuilder(...).build()` 生成，现在为自定义 tooltip 改成 `AugmentedPatternItem extends EncodedPatternItem`（构造仍传 `AugmentedPattern::new` 作解码器），类型判定不变。
 2. **组件必须带 `networkSynchronized`**。只写 `persistent` 时服务端能存，客户端读到 `null`，样板看起来是空的。
 3. **`grid` 不能用 `List.copyOf` 收尾**：`List.copyOf` 拒绝 `null` 元素，而空格的语义就是 `null`。用 `Collections.unmodifiableList(new ArrayList<>(grid))`。
+4. **`workstation` 是可选字段**（`AEItemKey.CODEC.optionalFieldOf("workstation")`），老样板解码出来是 `null`，按「不需要工作台」处理。所以**不许把它改成必填**：现存的所有样板会一起失效。装配室拿它做准入门槛，见「标志物栏是准入门槛」。
+5. **Codec 不能写成静态字段**：`AEItemKey.CODEC` 的静态初始化会碰 `BuiltInRegistries`，而它一进去就 `checkBootstrapCalled`。写成字段的话，连 `new AugmentedPatternData(...)` 这种纯数据校验都会连带崩掉（类初始化失败，之后一律 `NoClassDefFoundError`）。所以放进懒初始化的嵌套类 `Codecs`，由 `AugmentedPatternData.codec()` 取——`ModDataComponents` 在模组注册期调用它，那时必然已经 bootstrap。
 
-编码入口是 `AugmentedPattern.encode(...)`，编码终端的编写样板按钮会调它（见「编码终端」）；产物来源见「9x9 配方匹配」。装配室按样板执行尚未接入。
+### 样板 tooltip 排版
+
+AE2 的 `EncodedPatternItem#appendHoverText` 固定按「产物行（`制作:`）→ 逐条输入行（`使用:` / `与 …`）→ `properties` 行」渲染。9×9 样板每格一个 `IInput`，照它画出来就是同一个物品重复六七行；`properties` 又只能排在**最后**，没法把标志物行插到「制作」之前。所以 `AugmentedPatternItem` 覆写 `appendHoverText`、**不调 `super`**，自己按三段的顺序画：
+
+1. **标志物行**（在「制作」之上）：`标志物: <工作台>`；`workstation == null` 时显示「不要求」。这一行对应装配室的准入门槛，强调按物品键全等匹配。
+2. **制作行**：产物，多个用 `与` 连接，复用 AE2 的 `getTooltipEntryLine(GenericStack)`。
+3. **使用行**：`AugmentedPattern#groupedInputs()` 按 `AEKey` 全等分组（`LinkedHashMap` 保持首次出现顺序）、数量按格累加。**坐标只在开启高级信息（F3+H，`TooltipFlag#isAdvanced()`）时显示**——它是内部排布信息，普通悬停保持简洁。坐标串是 1-based `(列,行)`（灰色），`positionOf(index, width)` 是纯算术，单独由 `AugmentedPatternTooltipTest` 锁。
+
+「按下[P]查看样板」之类的提示由外部 tooltip 事件添加，不在 `appendHoverText` 里，覆写不影响它。解码失败时照 AE2 显示红色「无效样板」。
+
+编码入口是 `AugmentedPattern.encode(stack, width, height, grid, outputs, workstation)`，编码终端的编写样板按钮会调它（见「编码终端」）；产物来源见「9x9 配方匹配」，执行侧见「装配室执行模型」。
+
+**样板输出槽只收增广合成样板**：`AugmentedPatternEncodingTermMenu` 对 `ENCODED_PATTERN` 槽覆写 `mayPlace`，在 AE2 的 `RestrictedInputSlot` 校验之上追加「物品是 `AugmentedPatternItem`」。槽里的库存仍是 `PatternEncodingLogic#getEncodedPatternInv()`，所以旧存档里已放入的 AE2 原版样板仍能取出（`mayPickup` 不变），只是放不进新的。
 
 ## 测试
 
-- JUnit：`src/test/java`，跑 `./gradlew test`。槽位编号契约由 `AssemblerSlotsTest` 覆盖；AEjson 的画布尺寸与 `srcRect` 由 `StyleDocumentTest` 锁定，漏写 `textureWidth` 会直接失败；`BlockRegistrationTypeTest` 锁定方块/方块实体的 AE2 基类，`AssemblerInventoryTest` 锁定产物槽只出不进；`AssemblerAccelerationTest` 锁定五个档位的每 tick 进度与「4 卡每 tick 一次」，`AugmentedPatternDataTest` 锁定网格尺寸校验，`TerminalRegistrationTypeTest` 锁两个终端的继承链；`GridBoundsTest` / `AugmentedRecipeMatcherTest` 锁包围盒裁法、居中填充与判定器链的顺序、短路。
-- 单测跑在纯 JUnit 环境，没有原版注册表 bootstrap：**不要实例化方块实体、库存或 Part**（会碰 `ItemStack.EMPTY` / 空 level），也不要 `new ItemStack(Items.X)`、不要碰 `ItemStack.EMPTY`——`ItemStack` 的类初始化直接抛 `ExceptionInInitializerError`。把纯规则抽成静态方法再测（`AssemblerInventory#isInsertable`、`GridBounds#of` 的空格判定参数就是这么来的）。`Bootstrap.bootStrap()` 在 NeoForge 下会 NPE，别试。
+- JUnit：`src/test/java`，跑 `./gradlew test`。槽位编号契约由 `AssemblerSlotsTest` 覆盖；AEjson 的画布尺寸与 `srcRect` 由 `StyleDocumentTest` 锁定，漏写 `textureWidth` 会直接失败；`BlockRegistrationTypeTest` 锁定方块/方块实体的 AE2 基类，`AssemblerInventoryTest` 锁定产物槽只出不进；`AssemblerAccelerationTest` 锁定五个档位的每 tick 进度与「4 卡每 tick 一次」，`AugmentedPatternDataTest` 锁定网格尺寸校验，`AugmentedPatternTooltipTest` 锁 1-based 坐标换算，`TerminalRegistrationTypeTest` 锁两个终端的继承链；`GridBoundsTest` / `AugmentedRecipeMatcherTest` 锁包围盒裁法、居中填充、两个逆运算与判定器链的顺序、短路。
+- 单测跑在纯 JUnit 环境，没有原版注册表 bootstrap：**不要实例化方块实体、库存或 Part**（会碰 `ItemStack.EMPTY` / 空 level），也不要 `new ItemStack(Items.X)`、不要碰 `ItemStack.EMPTY`——`ItemStack` 的类初始化直接抛 `ExceptionInInitializerError`。把纯规则抽成静态方法再测（`AssemblerInventory#isInsertable`、`GridBounds#of` 的空格判定参数就是这么来的）。`Bootstrap.bootStrap()` 在 NeoForge 下会 NPE，别试。**同理别在会被纯 JUnit 触碰的类里放「静态初始化就碰注册表」的字段**——`AugmentedPatternData` 的 Codec 就是这么从静态字段改成 `codec()` 的。
 - GameTest：`src/test/java/io/github/lounode/ae2crafting/game/`，跑 `./gradlew runGameTestServer`；模板 `empty` 来自 `src/test/resources/data/ae2_crafting_integration/structure/empty.nbt`。`ModLoadGameTest#terminalsAreWiredToAe2` 在真实注册表上验两个终端的类型、菜单类型与无线链接登记；`RecipeMatchingGameTest` 验 9×9 网格的偏移摆放与「>3×3 让位」；`ExtendedCraftingMatchingGameTest` 用真实配方表验合成拓展的表格配方能原样还原；`WorkstationPersistenceGameTest` 两边各验一次标志工作方块落盘——面板用 `PartHelper.setPart` 挂到真实线缆上（**不能直接 `new`**：`AbstractTerminalPart#readFromNBT` 回填配置管理器时会回调 `saveChanges()`，未放置的部件在那里是 NPE），无线用换一个宿主模拟关窗重开。
-- 客户端启动：`run_client.bat`（等价 `./gradlew runClient --no-configuration-cache`）。AEjson 能否被 AE2 正确解析、槽位是否贴合贴图，仍需实机看。
+- `AssemblerAutomationGameTest` 锁装配室的整条执行链，六条：样板发配后逐格铺对（行列不能对调）→ 推进度 → 产物落到「供应器那一侧」的箱子而不只是产物槽 → 网格清干净；标志物栏空着时带工作台的样板被拒且**一格原料都不留**；执行中抽走标志物会暂停、原料不少、放回去能续上；界面侧网格槽默认 `isSlotEnabled() == false` 且放不进也拿不出；背包 Shift 点加速卡优先落进 `SlotSemantics.UPGRADE` 而不是标志物栏；样板 tooltip 的 `groupedInputs()` 把相同物品合并、数量累加、坐标按 1-based (列,行) 归组。**用箱子当供应器那一侧**是因为供应器把回收库存以 `ItemHandler.BLOCK` 暴露，箱子提供同一种能力，通路等价；直接调 `pushPattern` / `tick(int)` 而不摆一台真供应器，是因为摆齐频道/能量/图案槽之后验的就全是 AE2 自己的代码了。
+- 客户端启动：`run_client.bat`（等价 `./gradlew runClient --no-configuration-cache`）。AEjson 能否被 AE2 正确解析、槽位是否贴合贴图、呼吸灯模型有没有注册上、浮空产物动画是否播一次就停，仍需实机看——这几项**没有任何自动化测试能覆盖**。
 
 ## 开发运行环境
 
@@ -319,6 +454,7 @@ common/block/entity/     方块实体、91 格容器与加速档位表（已落�
 common/menu/             装配室菜单与槽位编号契约（已落地）
 common/pattern/          增广合成样板的数据与解码（已落地）
 client/gui/              装配室界面（已落地）
+client/render/           装配室呼吸灯与浮空产物（已落地）
 common/part/             面板终端（已落地）
 common/logic/            9x9 配方匹配、包围盒与居中填充（已落地）
 integration/<邻居>/      工作台/模组适配，按邻居隔离（合成拓展、无尽表格与无尽锻造已接）

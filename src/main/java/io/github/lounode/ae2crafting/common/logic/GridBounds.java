@@ -138,4 +138,70 @@ public record GridBounds(int width, int height, int left, int top) {
         }
         return centered;
     }
+
+    /**
+     * {@link #crop} 的逆运算：把包围盒坐标系下的一张表写回整张网格，其余格填 {@code empty}。
+     *
+     * <p>配方余料（铁桶剩空桶、无尽的不消耗催化剂）按<b>裁剪后的输入</b>返回，而装配室要按
+     * 9×9 网格逐格回填，所以需要这一层换算。返回列表的长度是 {@code gridWidth * gridHeight}。</p>
+     *
+     * @param gridHeight 整张网格的高，用于校验长度
+     */
+    public <T> List<T> scatter(List<T> values, int gridWidth, int gridHeight, T empty) {
+        var result = new ArrayList<T>(gridWidth * gridHeight);
+        for (int i = 0; i < gridWidth * gridHeight; i++) {
+            result.add(empty);
+        }
+        if (isEmpty()) {
+            return result;
+        }
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                result.set((top + y) * gridWidth + (left + x), values.get(y * width + x));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * {@link #centerIn} 的逆运算：把居中后的 {@code dstWidth × dstHeight} 表写回源网格。
+     *
+     * <p>无尽表格配方吃的是居中到台面尺寸的输入，余料也是按台面返回的；回填 9×9 时要按同一套
+     * 中心对齐偏移反推。超出包围盒的目标格（居中的留白）直接忽略。</p>
+     *
+     * <p><b>余料表的坐标系有两种，靠长度区分</b>：</p>
+     * <ul>
+     *   <li>原版口径（{@code CraftingRecipe#getRemainingItems} 的默认实现）按<b>输入尺寸</b>返回，
+     *       也就是 {@code dstWidth × dstHeight}，下标是台面坐标；</li>
+     *   <li>部分模组（无尽重生的表格配方）按<b>配方 pattern 尺寸</b>返回，也就是包围盒尺寸，
+     *       下标是包围盒坐标。</li>
+     * </ul>
+     * <p>长度相同时（包围盒恰好铺满台面）两套公式退化成同一个，所以这个判别是安全的。
+     * 早先只按台面坐标取，遇到第二种会拿 {@code 11×11} 的下标去读 81 格的表，
+     * 表现为 {@code Index 81 out of bounds for length 81}。</p>
+     */
+    public <T> List<T> scatterCentered(List<T> values, int gridWidth, int gridHeight,
+            int dstWidth, int dstHeight, T empty) {
+        var result = new ArrayList<T>(gridWidth * gridHeight);
+        for (int i = 0; i < gridWidth * gridHeight; i++) {
+            result.add(empty);
+        }
+        if (isEmpty()) {
+            return result;
+        }
+        int offsetX = (dstWidth - width) / 2;
+        int offsetY = (dstHeight - height) / 2;
+        boolean boundsSpace = values.size() != dstWidth * dstHeight;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int source = boundsSpace
+                        ? y * width + x
+                        : (y + offsetY) * dstWidth + (x + offsetX);
+                if (source >= 0 && source < values.size()) {
+                    result.set((top + y) * gridWidth + (left + x), values.get(source));
+                }
+            }
+        }
+        return result;
+    }
 }

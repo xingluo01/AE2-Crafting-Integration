@@ -11,6 +11,7 @@ import org.jetbrains.annotations.Nullable;
 import com.blakebr0.extendedcrafting.api.TableCraftingInput;
 import com.blakebr0.extendedcrafting.init.ModRecipeTypes;
 
+import io.github.lounode.ae2crafting.common.logic.GridBounds;
 import io.github.lounode.ae2crafting.common.logic.GridMatcher;
 
 /**
@@ -32,6 +33,11 @@ public final class ExtendedCraftingTableMatcher implements GridMatcher {
 
     @Override
     public @Nullable Match match(Level level, List<ItemStack> items, int width, int height) {
+        var bounds = GridBounds.ofItems(items, width, height);
+        if (bounds.isEmpty()) {
+            return null;
+        }
+
         var type = ModRecipeTypes.TABLE.get();
         // 一档一个输入：同档的配方复用同一个 TableCraftingInput，省掉重复的包围盒裁剪。
         var inputsByTier = new HashMap<Integer, TableCraftingInput>();
@@ -41,7 +47,9 @@ public final class ExtendedCraftingTableMatcher implements GridMatcher {
             var input = inputsByTier.computeIfAbsent(recipe.getTier(),
                     tier -> TableCraftingInput.of(width, height, items, tier));
             if (recipe.matches(input, level)) {
-                return new Match(recipe.assemble(input, level.registryAccess()), holder.id());
+                // 余料按裁剪后的输入返回，摊回整张 9×9 供装配室逐格回填。
+                var remaining = bounds.scatter(recipe.getRemainingItems(input), width, height, ItemStack.EMPTY);
+                return new Match(recipe.assemble(input, level.registryAccess()), holder.id(), remaining);
             }
         }
         return null;

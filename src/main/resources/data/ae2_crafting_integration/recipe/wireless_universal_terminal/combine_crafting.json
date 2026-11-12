@@ -1,0 +1,11 @@
+{
+  "type": "ae2wtlib:combine",
+  "terminalA": {
+    "item": "ae2:wireless_crafting_terminal"
+  },
+  "terminalB": {
+    "item": "ae2_crafting_integration:wireless_terminal"
+  },
+  "terminalAName": "crafting",
+  "terminalBName": "augmented_pattern_encoding"
+}
