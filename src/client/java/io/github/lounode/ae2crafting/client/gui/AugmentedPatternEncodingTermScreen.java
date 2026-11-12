@@ -14,6 +14,7 @@ import appeng.client.gui.style.StyleManager;
 import appeng.client.gui.widgets.ActionButton;
 import appeng.client.gui.widgets.ToggleButton;
 import appeng.core.localization.ButtonToolTips;
+import appeng.menu.SlotSemantics;
 
 import de.mari_023.ae2wtlib.api.gui.ScrollingUpgradesPanel;
 import de.mari_023.ae2wtlib.api.terminal.IUniversalTerminalCapable;
@@ -115,6 +116,29 @@ public class AugmentedPatternEncodingTermScreen
     protected void updateBeforeRender() {
         super.updateBeforeRender();
         substitutionsButton.setState(getMenu().isSubstitute());
+    }
+
+    /**
+     * 产物预览槽上的滚轮切换候选：多候选时（多模组厨锅最容易撞车）滚一格换一条配方。
+     * 其余位置的滚轮仍交给 ME 列表，不抢它的滚动。
+     */
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (getMenu().candidateCount() > 1 && isOverPreviewSlot(mouseX, mouseY)) {
+            getMenu().requestCycleCandidate(scrollY > 0 ? -1 : 1);
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    private boolean isOverPreviewSlot(double mouseX, double mouseY) {
+        var slots = getMenu().getSlots(SlotSemantics.CRAFTING_RESULT);
+        if (slots.isEmpty()) {
+            return false;
+        }
+        var slot = slots.getFirst();
+        return mouseX >= leftPos + slot.x && mouseX < leftPos + slot.x + 16
+                && mouseY >= topPos + slot.y && mouseY < topPos + slot.y + 16;
     }
 
     /** WUT 的终端切换热键；面板形态不转发，避免走到 getHost() 的 null 上。 */

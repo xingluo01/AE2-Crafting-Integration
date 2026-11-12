@@ -45,6 +45,7 @@ import appeng.util.inv.CombinedInternalInventory;
 import io.github.lounode.ae2crafting.common.logic.AugmentedRecipeMatcher;
 import io.github.lounode.ae2crafting.common.menu.AssemblerSlots;
 import io.github.lounode.ae2crafting.common.pattern.AugmentedPattern;
+import io.github.lounode.ae2crafting.integration.polymorph.PolymorphRecipeSelection;
 import io.github.lounode.ae2crafting.registry.ModBlockEntities;
 import io.github.lounode.ae2crafting.registry.ModBlocks;
 
@@ -355,8 +356,9 @@ public class MolecularAssemblerBlockEntity extends AENetworkedInvBlockEntity
             return;
         }
 
-        var match = AugmentedRecipeMatcher.match(level, craftOps.snapshotGridItems(),
-                AssemblerSlots.GRID_SIZE, AssemblerSlots.GRID_SIZE, craftOps.stationFor(pattern));
+        var match = AugmentedRecipeMatcher.matchPreferred(level, craftOps.snapshotGridItems(),
+                AssemblerSlots.GRID_SIZE, AssemblerSlots.GRID_SIZE, craftOps.stationFor(pattern),
+                pattern.getRecipeId(), PolymorphRecipeSelection.forBlockEntity(this));
         if (match == null || match.remaining().isEmpty()) {
             craftOps.clearGrid();
         } else {

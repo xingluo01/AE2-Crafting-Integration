@@ -30,6 +30,7 @@ public final class RecipeGridCategories {
     public static final String EXTENDED_CRAFTING = "extendedcrafting";
     public static final String AVARITIA = "avaritia";
     public static final String AVARITIA_DELIGHT = "avaritia_delight";
+    public static final String FARMERS_DELIGHT = "farmersdelight";
 
     /** 原版合成台。9 格，不需要标志工作方块。 */
     public static final Category VANILLA_CRAFTING =
@@ -56,7 +57,9 @@ public final class RecipeGridCategories {
             // 无尽锻造不是网格：五格十字，同样是「哪张台」由标志物决定。
             Category.cross(AVARITIA, "extreme_smithing", Station.AVARITIA_SMITHING),
             // 终焉厨锅：81 格行优先，容器按约定接在最后一个原料之后。
-            Category.sequential(AVARITIA_DELIGHT, "extreme_cooking", 9, Station.COOKING_POT));
+            Category.sequential(AVARITIA_DELIGHT, "extreme_cooking", 9, Station.COOKING_POT),
+            // 农夫乐事本体厨锅：同一套布局，配方类型不同。
+            Category.sequential(FARMERS_DELIGHT, "cooking", 9, Station.FARMERS_COOKING_POT));
 
     /** 标志工作方块怎么来。 */
     public enum Station {
@@ -74,8 +77,10 @@ public final class RecipeGridCategories {
         FLUX_CRAFTER,
         /** 组合合成核心。 */
         COMBINATION,
-        /** 终焉厨锅。 */
-        COOKING_POT
+        /** 终焉厨锅（无尽乐事）。 */
+        COOKING_POT,
+        /** 农夫乐事本体厨锅。 */
+        FARMERS_COOKING_POT
     }
 
     /** 输入在编码台上的落位方式，决定转移端按哪种顺序铺料。 */

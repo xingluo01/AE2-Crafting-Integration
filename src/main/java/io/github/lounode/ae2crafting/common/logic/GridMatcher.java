@@ -85,4 +85,28 @@ public interface GridMatcher {
     default Match match(Level level, List<ItemStack> items, int width, int height, @Nullable ItemStack station) {
         return match(level, items, width, height);
     }
+
+    /**
+     * 带「多候选选择器」的版本。
+     *
+     * <p>默认实现忽略选择器并转给五参版本——只有真正会收集多条候选的判定器（目前是原版合成台）
+     * 才需要覆写它；其余判定器本来就按机器类型短路，同一类型下命中多条的情况很少。</p>
+     */
+    @Nullable
+    default Match match(Level level, List<ItemStack> items, int width, int height,
+            @Nullable ItemStack station, @Nullable RecipeSelection selection) {
+        return match(level, items, width, height, station);
+    }
+
+    /**
+     * 同一判定器内命中的全部候选，按优先级排列。
+     *
+     * <p>默认只有一条（就是 {@link #match} 的结果）。会命中多条的判定器（原版合成、厨锅）
+     * 覆写它，供编码终端做「候选切换」；选择器返回的候选会被提到第一位，其余保持原顺序。</p>
+     */
+    default List<Match> matchAll(Level level, List<ItemStack> items, int width, int height,
+            @Nullable ItemStack station, @Nullable RecipeSelection selection) {
+        var match = match(level, items, width, height, station, selection);
+        return match == null ? List.of() : List.of(match);
+    }
 }

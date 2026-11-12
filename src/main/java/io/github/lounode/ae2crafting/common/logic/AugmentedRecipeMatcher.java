@@ -4,8 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.Level;
 
@@ -75,7 +78,17 @@ public final class AugmentedRecipeMatcher {
     @Nullable
     public static GridMatcher.Match match(Level level, List<ItemStack> items, int width, int height,
             @Nullable ItemStack station) {
-        return matchWithChain(level, items, width, height, station, MATCHERS);
+        return match(level, items, width, height, station, null);
+    }
+
+    /**
+     * 带多候选选择器的版本。{@code selection} 为 {@code null} 时行为与五参版本完全一致
+     * （判定器看到 null 就走「第一个命中获胜」的短路路径，不收集候选）。
+     */
+    @Nullable
+    public static GridMatcher.Match match(Level level, List<ItemStack> items, int width, int height,
+            @Nullable ItemStack station, @Nullable RecipeSelection selection) {
+        return matchWithChain(level, items, width, height, station, selection, MATCHERS);
     }
 
     /** 指定判定器链的版本。包内可见：单测用它验证顺序与短路，不必污染全局注册表。 */
@@ -88,13 +101,54 @@ public final class AugmentedRecipeMatcher {
     @Nullable
     static GridMatcher.Match matchWithChain(Level level, List<ItemStack> items, int width, int height,
             @Nullable ItemStack station, List<GridMatcher> matchers) {
+        return matchWithChain(level, items, width, height, station, null, matchers);
+    }
+
+    @Nullable
+    static GridMatcher.Match matchWithChain(Level level, List<ItemStack> items, int width, int height,
+            @Nullable ItemStack station, @Nullable RecipeSelection selection, List<GridMatcher> matchers) {
         for (var matcher : matchers) {
-            var match = matcher.match(level, items, width, height, station);
-            if (match != null) {
-                return match;
+            var matches = matcher.matchAll(level, items, width, height, station, selection);
+            if (!matches.isEmpty()) {
+                return matches.getFirst();
             }
         }
         return null;
+    }
+
+    /**
+     * 命中的全部候选。跨判定器仍然「第一个非空获胜」，只在命中的那个判定器内部展开多条。
+     *
+     * <p>编码终端用它做候选切换；厨锅这类同一配方类型下容易多命中的判定器是主要场景。</p>
+     */
+    public static List<GridMatcher.Match> matchCandidates(Level level, List<ItemStack> items,
+            int width, int height, @Nullable ItemStack station, @Nullable RecipeSelection selection) {
+        for (var matcher : MATCHERS) {
+            var matches = matcher.matchAll(level, items, width, height, station, selection);
+            if (!matches.isEmpty()) {
+                return matches;
+            }
+        }
+        return List.of();
+    }
+
+    /** 按样板记录的配方 id 从候选里选；找不到（配方被删/改了）就回退第一个。 */
+    @Nullable
+    public static GridMatcher.Match matchPreferred(Level level, List<ItemStack> items, int width, int height,
+            @Nullable ItemStack station, @Nullable ResourceLocation recipeId,
+            @Nullable RecipeSelection selection) {
+        var matches = matchCandidates(level, items, width, height, station, selection);
+        if (matches.isEmpty()) {
+            return null;
+        }
+        if (recipeId != null) {
+            for (var match : matches) {
+                if (recipeId.equals(match.recipeId())) {
+                    return match;
+                }
+            }
+        }
+        return matches.getFirst();
     }
 
     /**
@@ -118,6 +172,9 @@ public final class AugmentedRecipeMatcher {
     /** 原版合成台：裁包围盒 → 查 {@code RecipeType.CRAFTING}。 */
     private static final class VanillaCraftingMatcher implements GridMatcher {
 
+        /** 多态合成一次最多收集这么多候选，避免配方包很大时把列表撑爆。 */
+        private static final int MAX_SELECTION_CANDIDATES = 16;
+
         /**
          * 标志物是特殊工作台时让路：末影/通量合成器、组合合成器、终焉厨锅都是 3×3 或 9×9 的
          * 网格配方，若原版判定器抢先命中，同一个图案会被解释成普通配方。
@@ -132,6 +189,51 @@ public final class AugmentedRecipeMatcher {
             return match(level, items, width, height);
         }
 
+        /**
+         * 多候选版本：原版合成同一组输入命中多条时全部收集（上限 {@value #MAX_SELECTION_CANDIDATES}），
+         * 供编码终端切换。选择器返回的候选提到第一位，其余保持注册表顺序。
+         */
+        @Override
+        public List<Match> matchAll(Level level, List<ItemStack> items, int width, int height,
+                @Nullable ItemStack station, @Nullable RecipeSelection selection) {
+            if (CraftRules.isSpecialWorkstation(station)) {
+                return List.of();
+            }
+            var bounds = GridBounds.ofItems(items, width, height);
+            if (bounds.isEmpty() || bounds.width() > VANILLA_MAX_SIZE || bounds.height() > VANILLA_MAX_SIZE) {
+                return List.of();
+            }
+            var input = CraftingInput.of(bounds.width(), bounds.height(), bounds.crop(items, width));
+
+            var holders = new ArrayList<RecipeHolder<CraftingRecipe>>();
+            for (var holder : level.getRecipeManager().getAllRecipesFor(RecipeType.CRAFTING)) {
+                if (holder.value().matches(input, level)) {
+                    holders.add(holder);
+                    if (holders.size() >= MAX_SELECTION_CANDIDATES) {
+                        break;
+                    }
+                }
+            }
+            if (holders.isEmpty()) {
+                return List.of();
+            }
+            if (selection != null) {
+                var chosen = selection.select(RecipeType.CRAFTING, input, holders);
+                if (chosen != null) {
+                    holders.remove(chosen);
+                    holders.addFirst(chosen);
+                }
+            }
+            var matches = new ArrayList<Match>(holders.size());
+            for (var holder : holders) {
+                var recipe = holder.value();
+                // 余料按裁剪后的输入返回，这里摊回整张网格：装配室完成一次合成后要逐格回填。
+                var remaining = bounds.scatter(recipe.getRemainingItems(input), width, height, ItemStack.EMPTY);
+                matches.add(new Match(recipe.assemble(input, level.registryAccess()), holder.id(), remaining));
+            }
+            return matches;
+        }
+
         @Nullable
         @Override
         public Match match(Level level, List<ItemStack> items, int width, int height) {
@@ -139,8 +241,12 @@ public final class AugmentedRecipeMatcher {
             if (bounds.isEmpty() || bounds.width() > VANILLA_MAX_SIZE || bounds.height() > VANILLA_MAX_SIZE) {
                 return null;
             }
-
             var input = CraftingInput.of(bounds.width(), bounds.height(), bounds.crop(items, width));
+            return matchSingle(level, input, bounds, width, height);
+        }
+
+        @Nullable
+        private Match matchSingle(Level level, CraftingInput input, GridBounds bounds, int width, int height) {
             var holder = level.getRecipeManager().getRecipeFor(RecipeType.CRAFTING, input, level).orElse(null);
             if (holder == null) {
                 return null;

@@ -6,6 +6,7 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
+import net.neoforged.neoforge.client.event.RegisterColorHandlersEvent;
 import net.neoforged.neoforge.client.event.ModelEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 
@@ -17,7 +18,10 @@ import io.github.lounode.ae2crafting.AE2CraftingIntegration;
 import io.github.lounode.ae2crafting.client.gui.AugmentedPatternEncodingTermScreen;
 import io.github.lounode.ae2crafting.client.gui.MolecularAssemblerScreen;
 import io.github.lounode.ae2crafting.client.render.MolecularAssemblerRenderer;
+import appeng.api.util.AEColor;
+
 import io.github.lounode.ae2crafting.registry.ModBlockEntities;
+import io.github.lounode.ae2crafting.registry.ModItems;
 import io.github.lounode.ae2crafting.registry.ModMenuTypes;
 
 /**
@@ -49,6 +53,7 @@ public class AE2CraftingClient {
         modBus.addListener(this::registerScreens);
         modBus.addListener(this::registerRenderers);
         modBus.addListener(this::registerAdditionalModels);
+        modBus.addListener(this::registerItemColors);
 
         this.guide = Guide.builder(GUIDE_ID)
                 .folder("ae2guide")
@@ -56,6 +61,18 @@ public class AE2CraftingClient {
                 .defaultLanguage("zh_cn")
                 .startPage(GUIDE_START_PAGE)
                 .build();
+    }
+
+    /**
+     * 面板终端物品的三个覆盖层（bright / medium / dark）按 tint 索引取 AE2 透明色的亮度变体。
+     *
+     * <p>AE2 的 {@code InitItemColors} 只遍历它自己的物品，本模组的 {@code PartItem} 不在里面；
+     * 不注册的话三层会保持贴图原色，和贴在电缆上的方块形态对不上。{@code StaticItemColor}
+     * 用的是同一条 {@code AEColor#getVariantByTintIndex}，这里保持一致。</p>
+     */
+    private void registerItemColors(RegisterColorHandlersEvent.Item event) {
+        event.register((stack, tintIndex) -> AEColor.TRANSPARENT.getVariantByTintIndex(tintIndex),
+                ModItems.PATTERN_ENCODING_TERMINAL.get());
     }
 
     private void registerScreens(RegisterMenuScreensEvent event) {

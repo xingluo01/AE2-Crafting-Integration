@@ -65,6 +65,7 @@ final class JeiTransferStations {
             case FLUX_CRAFTER -> fluxCrafterStation();
             case COMBINATION -> combinationStation();
             case COOKING_POT -> cookingPotStation();
+            case FARMERS_COOKING_POT -> farmersCookingPotStation();
         };
     }
 
@@ -96,6 +97,14 @@ final class JeiTransferStations {
     private static ItemStack cookingPotStation() {
         return BuiltInRegistries.ITEM
                 .getOptional(ResourceLocation.fromNamespaceAndPath("avaritia_delight", "extreme_cooking_pot"))
+                .map(ItemStack::new)
+                .orElse(ItemStack.EMPTY);
+    }
+
+    /** 农夫乐事本体厨锅，同样按 id 查：它只在 localRuntime。 */
+    private static ItemStack farmersCookingPotStation() {
+        return BuiltInRegistries.ITEM
+                .getOptional(ResourceLocation.fromNamespaceAndPath("farmersdelight", "cooking_pot"))
                 .map(ItemStack::new)
                 .orElse(ItemStack.EMPTY);
     }

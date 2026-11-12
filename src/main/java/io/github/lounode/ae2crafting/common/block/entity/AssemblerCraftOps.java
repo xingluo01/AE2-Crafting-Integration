@@ -17,6 +17,7 @@ import io.github.lounode.ae2crafting.common.logic.CraftKind;
 import io.github.lounode.ae2crafting.common.logic.CraftRules;
 import io.github.lounode.ae2crafting.common.menu.AssemblerSlots;
 import io.github.lounode.ae2crafting.common.pattern.AugmentedPattern;
+import io.github.lounode.ae2crafting.integration.polymorph.PolymorphRecipeSelection;
 
 /**
  * 装配室的「配方规则 + 铺料」这一摊事：找标志物、解析机器类别、算通量耗能、
@@ -116,8 +117,8 @@ final class AssemblerCraftOps {
         }
         var data = pattern.getData();
         var items = AugmentedRecipeMatcher.toItemStacks(data.grid());
-        var match = AugmentedRecipeMatcher.match(level, items, data.width(), data.height(),
-                stationFor(pattern));
+        var match = AugmentedRecipeMatcher.matchPreferred(level, items, data.width(), data.height(),
+                stationFor(pattern), pattern.getRecipeId(), PolymorphRecipeSelection.forBlockEntity(owner));
         if (match != null) {
             craftKind = match.kind();
             requiredInputs = match.requiredInputs();

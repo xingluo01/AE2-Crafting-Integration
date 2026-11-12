@@ -215,6 +215,11 @@ public final class AugmentedEncodeTransferHandler
             result.add(combinationCenter(recipe, stock));
         }
         for (var ingredient : recipe.getIngredients()) {
+            // 有些锅配方会把原料列表补足到 81 个空 Ingredient；空条目会占位，
+            // 把顺延的容器挤出 81 格，所以直接跳过。
+            if (ingredient.isEmpty()) {
+                continue;
+            }
             result.add(pick(ingredient, stock));
         }
         return result;
@@ -225,9 +230,8 @@ public final class AugmentedEncodeTransferHandler
      * 方法不存在（别的配方）或抛错时返回空栈，转移只铺原料。
      */
     private ItemStack cookingPotContainer(Recipe<?> recipe) {
-        if (!ModList.get().isLoaded("avaritia_delight")) {
-            return ItemStack.EMPTY;
-        }
+        // 不按模组名守卫：这个类别本身已经由 JEI 的 UID 决定，配方对象上有 getOutputContainer
+        // 就说明是厨锅类配方；按 avaritia_delight 判断会把只装农夫乐事的场景挡掉。
         try {
             var method = recipe.getClass().getMethod("getOutputContainer");
             return method.invoke(recipe) instanceof ItemStack stack ? stack.copy() : ItemStack.EMPTY;

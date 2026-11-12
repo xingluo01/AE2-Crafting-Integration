@@ -8,6 +8,7 @@ import java.util.Objects;
 
 import org.jetbrains.annotations.Nullable;
 
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
@@ -95,9 +96,13 @@ public class AugmentedPattern implements IPatternDetails {
     public static void encode(ItemStack stack, int width, int height,
             List<@Nullable GenericStack> grid, List<GenericStack> outputs, @Nullable AEItemKey workstation,
             boolean substitute, @Nullable GenericStack container) {
+        encode(stack, new AugmentedPatternData(width, height, grid, outputs, workstation, substitute, container));
+    }
+
+    /** 直接写入一份完整数据：编码终端要把选中的候选配方 id 一起带进去。 */
+    public static void encode(ItemStack stack, AugmentedPatternData data) {
         Objects.requireNonNull(stack, "stack");
-        stack.set(ModDataComponents.AUGMENTED_PATTERN.get(),
-                new AugmentedPatternData(width, height, grid, outputs, workstation, substitute, container));
+        stack.set(ModDataComponents.AUGMENTED_PATTERN.get(), data);
     }
 
     /** 这张样板要求的工作台；{@code null} 表示不需要（原版 3×3 之类）。 */
@@ -110,6 +115,12 @@ public class AugmentedPattern implements IPatternDetails {
     @Nullable
     public GenericStack getContainer() {
         return data.container();
+    }
+
+    /** 编码时选中的候选配方 id；{@code null} 表示没有多候选，或旧样板没记这一项。 */
+    @Nullable
+    public ResourceLocation getRecipeId() {
+        return data.recipeId();
     }
 
     /** 样板记录的网格尺寸与内容；界面画 9×9 预览时要用。 */

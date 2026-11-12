@@ -12,6 +12,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import org.jetbrains.annotations.Nullable;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.network.codec.StreamCodec;
 
 import appeng.api.stacks.AEItemKey;
@@ -42,7 +43,7 @@ import appeng.api.stacks.GenericStack;
  */
 public record AugmentedPatternData(int width, int height, List<@Nullable GenericStack> grid,
         List<GenericStack> outputs, @Nullable AEItemKey workstation, boolean substitute,
-        @Nullable GenericStack container) {
+        @Nullable GenericStack container, @Nullable ResourceLocation recipeId) {
 
     /** 与 {@code AssemblerSlots.GRID_SIZE} 一致；写死在这里避免 common 层依赖菜单包。 */
     public static final int MAX_DIMENSION = 9;
@@ -80,10 +81,14 @@ public record AugmentedPatternData(int width, int height, List<@Nullable Generic
                         .forGetter(data -> Optional.of(data.substitute())),
                 // 可选字段：老样板没有产物容纳物。
                 GenericStack.CODEC.optionalFieldOf("container")
-                        .forGetter(data -> Optional.ofNullable(data.container())))
-                .apply(builder, (width, height, grid, outputs, workstation, substitute, container) ->
+                        .forGetter(data -> Optional.ofNullable(data.container())),
+                // 可选字段：编码时选中的候选配方 id，装配室据此按同一配方执行。
+                ResourceLocation.CODEC.optionalFieldOf("recipe")
+                        .forGetter(data -> Optional.ofNullable(data.recipeId())))
+                .apply(builder, (width, height, grid, outputs, workstation, substitute, container, recipe) ->
                         new AugmentedPatternData(width, height, grid, outputs,
-                                workstation.orElse(null), substitute.orElse(false), container.orElse(null))));
+                                workstation.orElse(null), substitute.orElse(false),
+                                container.orElse(null), recipe.orElse(null))));
 
         private Codecs() {
         }
@@ -92,19 +97,26 @@ public record AugmentedPatternData(int width, int height, List<@Nullable Generic
     /** 不带标志工作方块、替换状态与容纳物的旧写法，原版 3×3 配方与既有测试用。 */
     public AugmentedPatternData(int width, int height, List<@Nullable GenericStack> grid,
             List<GenericStack> outputs) {
-        this(width, height, grid, outputs, null, false, null);
+        this(width, height, grid, outputs, null, false, null, null);
     }
 
     /** 不带替换状态与容纳物的写法，默认「替换已禁用」。 */
     public AugmentedPatternData(int width, int height, List<@Nullable GenericStack> grid,
             List<GenericStack> outputs, @Nullable AEItemKey workstation) {
-        this(width, height, grid, outputs, workstation, false, null);
+        this(width, height, grid, outputs, workstation, false, null, null);
     }
 
     /** 带替换状态但不带容纳物的写法。 */
     public AugmentedPatternData(int width, int height, List<@Nullable GenericStack> grid,
             List<GenericStack> outputs, @Nullable AEItemKey workstation, boolean substitute) {
-        this(width, height, grid, outputs, workstation, substitute, null);
+        this(width, height, grid, outputs, workstation, substitute, null, null);
+    }
+
+    /** 带容纳物但不带候选配方 id 的写法。 */
+    public AugmentedPatternData(int width, int height, List<@Nullable GenericStack> grid,
+            List<GenericStack> outputs, @Nullable AEItemKey workstation, boolean substitute,
+            @Nullable GenericStack container) {
+        this(width, height, grid, outputs, workstation, substitute, container, null);
     }
 
     public AugmentedPatternData {
@@ -162,6 +174,10 @@ public record AugmentedPatternData(int width, int height, List<@Nullable Generic
         if (data.container != null) {
             GenericStack.writeBuffer(data.container, buffer);
         }
+        buffer.writeBoolean(data.recipeId != null);
+        if (data.recipeId != null) {
+            buffer.writeResourceLocation(data.recipeId);
+        }
     }
 
     private static AugmentedPatternData read(RegistryFriendlyByteBuf buffer) {
@@ -179,6 +195,7 @@ public record AugmentedPatternData(int width, int height, List<@Nullable Generic
         AEItemKey workstation = buffer.readBoolean() ? AEItemKey.fromPacket(buffer) : null;
         boolean substitute = buffer.readBoolean();
         GenericStack container = buffer.readBoolean() ? GenericStack.readBuffer(buffer) : null;
-        return new AugmentedPatternData(width, height, grid, outputs, workstation, substitute, container);
+        ResourceLocation recipeId = buffer.readBoolean() ? buffer.readResourceLocation() : null;
+        return new AugmentedPatternData(width, height, grid, outputs, workstation, substitute, container, recipeId);
     }
 }

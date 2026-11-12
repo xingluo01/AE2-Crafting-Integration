@@ -12,6 +12,8 @@ import io.github.lounode.ae2crafting.integration.extendedcrafting.ExtendedCrafti
 import io.github.lounode.ae2crafting.integration.extendedcrafting.ExtendedCraftingCombinationMatcher;
 import io.github.lounode.ae2crafting.integration.extendedcrafting.ExtendedCraftingMachines;
 import io.github.lounode.ae2crafting.integration.extendedcrafting.ExtendedCraftingTableMatcher;
+import io.github.lounode.ae2crafting.integration.farmersdelight.FarmersDelightCookingMatcher;
+import io.github.lounode.ae2crafting.integration.farmersdelight.FarmersDelightMachines;
 
 /**
  * 邻居模组的总入口：**唯一**一处用 {@code isLoaded} 分流的地方。
@@ -26,6 +28,7 @@ public final class ModIntegrations {
     private static final String EXTENDED_CRAFTING = "extendedcrafting";
     private static final String AVARITIA = "avaritia";
     private static final String AVARITIA_DELIGHT = "avaritia_delight";
+    private static final String FARMERS_DELIGHT = "farmersdelight";
 
     private ModIntegrations() {
     }
@@ -56,6 +59,10 @@ public final class ModIntegrations {
         if (ModList.get().isLoaded(AVARITIA_DELIGHT)) {
             AvaritiaDelightMachines.registerRules();
             AugmentedRecipeMatcher.registerIntegration(new ExtremeCookingPotMatcher());
+        }
+        if (ModList.get().isLoaded(FARMERS_DELIGHT)) {
+            FarmersDelightMachines.registerRules();
+            AugmentedRecipeMatcher.registerIntegration(new FarmersDelightCookingMatcher());
         }
     }
 }

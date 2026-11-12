@@ -9,6 +9,7 @@
   "gui.ae2_crafting_integration.assembler.workstations": "标志物栏",
   "gui.ae2_crafting_integration.jei.recipe_too_large": "这个配方超出 9x9 编码台",
   "gui.ae2_crafting_integration.jei.incomplete_recipe": "配方缺少锻造所需的格子",
+  "gui.ae2_crafting_integration.candidates": "候选 %s/%s（滚轮切换）",
   "gui.ae2_crafting_integration.assembler.speed_cards": "加速卡：%s 张",
   "gui.ae2_crafting_integration.pattern.workstation": "标志物",
   "gui.ae2_crafting_integration.pattern.workstation.none": "不要求"

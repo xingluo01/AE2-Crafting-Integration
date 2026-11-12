@@ -25,7 +25,8 @@ public class SpecialWorkstationGameTest {
             "extendedcrafting:ender_crafter",
             "extendedcrafting:flux_crafter",
             "extendedcrafting:crafting_core",
-            "avaritia_delight:extreme_cooking_pot"
+            "avaritia_delight:extreme_cooking_pot",
+            "farmersdelight:cooking_pot"
     };
 
     private static final String[] CATALYSTS = {
@@ -50,6 +51,18 @@ public class SpecialWorkstationGameTest {
                         .getOptional(ResourceLocation.fromNamespaceAndPath("avaritia_delight", "extreme_cooking"))
                         .isPresent(),
                 "终焉厨锅的配方类型没注册，判定器会永远返回 null");
+        helper.succeed();
+    }
+
+    /** 多态合成的 API 类必须真的在运行期存在，否则反射选择器会永远静默回退。 */
+    @GameTest(template = "empty")
+    public void polymorphApiIsPresent(GameTestHelper helper) {
+        try {
+            Class.forName("com.illusivesoulworks.polymorph.api.PolymorphApi");
+        } catch (ClassNotFoundException e) {
+            helper.fail("Polymorph API 类不存在，反射选择器会永远回退到第一个候选");
+            return;
+        }
         helper.succeed();
     }
 

@@ -12,6 +12,7 @@ import com.blakebr0.extendedcrafting.api.TableCraftingInput;
 import com.blakebr0.extendedcrafting.crafting.recipe.ShapedTableRecipe;
 import com.blakebr0.extendedcrafting.init.ModRecipeTypes;
 
+import io.github.lounode.ae2crafting.common.logic.CraftRules;
 import io.github.lounode.ae2crafting.common.logic.GridBounds;
 import io.github.lounode.ae2crafting.common.logic.GridMatcher;
 
@@ -31,6 +32,19 @@ import io.github.lounode.ae2crafting.common.logic.GridMatcher;
  * {@code ModIntegrations} 挡在 {@code isLoaded} 之后。</p>
  */
 public final class ExtendedCraftingTableMatcher implements GridMatcher {
+
+    /**
+     * 特殊工作台让路：表格判定器不限工作台，厨锅 / 末影 / 通量 / 组合的网格如果先被它
+     * 解释成某条表格配方，编码端拿到的 {@code kind} 就不是厨锅，容器不会被摘进样板。
+     */
+    @Override
+    public @Nullable Match match(Level level, List<ItemStack> items, int width, int height,
+            @Nullable ItemStack station) {
+        if (CraftRules.isSpecialWorkstation(station)) {
+            return null;
+        }
+        return match(level, items, width, height);
+    }
 
     @Override
     public @Nullable Match match(Level level, List<ItemStack> items, int width, int height) {

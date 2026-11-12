@@ -9,6 +9,7 @@
   "gui.ae2_crafting_integration.assembler.workstations": "Workstations",
   "gui.ae2_crafting_integration.jei.recipe_too_large": "This recipe does not fit a 9x9 encoding grid",
   "gui.ae2_crafting_integration.jei.incomplete_recipe": "This smithing recipe is missing grid slots",
+  "gui.ae2_crafting_integration.candidates": "Candidate %s/%s (scroll to switch)",
   "gui.ae2_crafting_integration.assembler.speed_cards": "Acceleration Cards: %s",
   "gui.ae2_crafting_integration.pattern.workstation": "Workstation",
   "gui.ae2_crafting_integration.pattern.workstation.none": "Not required"

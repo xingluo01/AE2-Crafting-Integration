@@ -3,6 +3,7 @@ package io.github.lounode.ae2crafting.common.menu;
 import java.util.ArrayList;
 import java.util.List;
 
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -39,6 +40,7 @@ import io.github.lounode.ae2crafting.common.logic.GridBounds;
 import io.github.lounode.ae2crafting.common.logic.GridMatcher;
 import io.github.lounode.ae2crafting.common.pattern.AugmentedPattern;
 import io.github.lounode.ae2crafting.common.pattern.AugmentedPatternData;
+import io.github.lounode.ae2crafting.integration.polymorph.PolymorphRecipeSelection;
 import io.github.lounode.ae2crafting.registry.ModDataComponents;
 import io.github.lounode.ae2crafting.registry.ModItems;
 import io.github.lounode.ae2crafting.registry.ModSlotSemantics;
@@ -73,6 +75,7 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
     private static final String ACTION_ENCODE = "encode_augmented_pattern";
     private static final String ACTION_CLEAR = "clear_augmented_grid";
     private static final String ACTION_SET_SUBSTITUTION = "set_augmented_substitution";
+    private static final String ACTION_CYCLE_CANDIDATE = "cycle_augmented_candidate";
 
     public static final MenuType<AugmentedPatternEncodingTermMenu> TYPE = MenuTypeBuilder
             .create((id, playerInventory, host) -> new AugmentedPatternEncodingTermMenu(id, playerInventory, host),
@@ -100,6 +103,17 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
      */
     @GuiSync(20)
     public boolean substitute;
+
+    /** 当前命中的候选（同一判定器内），只在服务端维护；客户端只有数量与索引。 */
+    private List<GridMatcher.Match> candidates = List.of();
+    /** 候选索引与数量：产物预览槽的滚轮切换要用，必须同步到客户端。 */
+    @GuiSync(21)
+    public int candidateIndex;
+    @GuiSync(22)
+    public int candidateCount;
+    /** 反填样板带来的配方 id，下一次重建候选时按它定位索引。 */
+    @Nullable
+    private ResourceLocation pendingRecipeId;
 
     /**
      * 已经反填进编码矩阵的样板数据。构造时先记下输出槽里已有的那张，
@@ -165,6 +179,7 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
         registerClientAction(ACTION_ENCODE, this::encode);
         registerClientAction(ACTION_CLEAR, this::clear);
         registerClientAction(ACTION_SET_SUBSTITUTION, Boolean.class, this::applySubstitution);
+        registerClientAction(ACTION_CYCLE_CANDIDATE, Integer.class, this::cycleCandidate);
     }
 
     /** 当前界面是不是由无线通用终端（WUT）切换过来的。 */
@@ -269,6 +284,8 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
         workstationInventory.setStack(0,
                 workstation == null ? null : new GenericStack(workstation, 1));
         applySubstitution(data.substitute());
+        // 反填的样板可能带着候选配方 id；下一次重建候选时按它定位索引。
+        pendingRecipeId = data.recipeId();
     }
 
     /**
@@ -320,11 +337,71 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
             return;
         }
         lastGridSignature = signature;
-        var grid = snapshotGrid();
-        var match = matchOutput(AugmentedRecipeMatcher.toItemStacks(grid), station);
+        rebuildCandidates(AugmentedRecipeMatcher.toItemStacks(snapshotGrid()), station);
+    }
+
+    /** 重跑判定器链收集候选；样板带来的配方 id 优先定位，找不到则保持原索引。 */
+    private void rebuildCandidates(List<ItemStack> items, ItemStack station) {
+        candidates = AugmentedRecipeMatcher.matchCandidates(getPlayer().level(), items,
+                GRID_WIDTH, GRID_HEIGHT, station, PolymorphRecipeSelection.forMenu(this, getPlayer()));
+        candidateCount = candidates.size();
+        if (candidates.isEmpty()) {
+            candidateIndex = 0;
+            applyPreview();
+            return;
+        }
+        if (pendingRecipeId != null) {
+            for (int i = 0; i < candidates.size(); i++) {
+                if (pendingRecipeId.equals(candidates.get(i).recipeId())) {
+                    candidateIndex = i;
+                    break;
+                }
+            }
+            pendingRecipeId = null;
+        }
+        candidateIndex = Math.floorMod(candidateIndex, candidates.size());
+        applyPreview();
+    }
+
+    private void applyPreview() {
+        var match = currentCandidate();
         previewOutput = match != null ? GenericStack.fromItemStack(match.output()) : null;
         previewInventory.setItemDirect(0,
                 previewOutput != null ? GenericStack.wrapInItemStack(previewOutput) : ItemStack.EMPTY);
+    }
+
+    @Nullable
+    private GridMatcher.Match currentCandidate() {
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        return candidates.get(Math.floorMod(candidateIndex, candidates.size()));
+    }
+
+    /** 界面滚轮切换候选：客户端发动作，服务端改索引并重算预览。 */
+    public void requestCycleCandidate(int delta) {
+        if (isClientSide()) {
+            sendClientAction(ACTION_CYCLE_CANDIDATE, delta);
+        } else {
+            cycleCandidate(delta);
+        }
+    }
+
+    private void cycleCandidate(int delta) {
+        if (candidates.size() <= 1) {
+            return;
+        }
+        candidateIndex = Math.floorMod(candidateIndex + delta, candidates.size());
+        applyPreview();
+    }
+
+    /** 客户端读候选数量，决定要不要拦滚轮。 */
+    public int candidateCount() {
+        return candidateCount;
+    }
+
+    public int candidateIndex() {
+        return candidateIndex;
     }
 
     /** 编码台的 81 格快照，行优先。空格的元素是 {@code null}（{@code ConfigInventory} 的原样表示）。 */
@@ -366,17 +443,6 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
     }
 
     /**
-     * 拿整张网格 + 标志物去问判定器链。
-     *
-     * <p>返回整个 {@link GridMatcher.Match} 而不只是产物：编码时要看 {@code kind()} 才能决定
-     * 这张网格能不能居中——组合合成的「中心 + 螺旋」是位置敏感的坐标系，居中会把中心格挪走。</p>
-     */
-    @Nullable
-    private GridMatcher.Match matchOutput(List<ItemStack> items, ItemStack station) {
-        return AugmentedRecipeMatcher.match(getPlayer().level(), items, GRID_WIDTH, GRID_HEIGHT, station);
-    }
-
-    /**
      * 把当前 9x9 网格写成一张增广合成样板。
      *
      * <p>只要求空白样板槽有货。输出槽里已有样板时直接覆盖——玩家再点一次编码就是想换一张，
@@ -398,10 +464,16 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
         var grid = snapshotGrid();
         var station = stationItem();
         var items = AugmentedRecipeMatcher.toItemStacks(grid);
-        var match = matchOutput(items, station);
-        if (match == null) {
+        var matches = AugmentedRecipeMatcher.matchCandidates(getPlayer().level(), items,
+                GRID_WIDTH, GRID_HEIGHT, station, PolymorphRecipeSelection.forMenu(this, getPlayer()));
+        if (matches.isEmpty()) {
             return;
         }
+        var index = Math.floorMod(candidateIndex, matches.size());
+        candidates = matches;
+        candidateCount = matches.size();
+        candidateIndex = index;
+        var match = matches.get(index);
         var output = GenericStack.fromItemStack(match.output());
         if (output == null) {
             return;
@@ -437,8 +509,8 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
         var pattern = new ItemStack(ModItems.AUGMENTED_CRAFTING_PATTERN.get());
         // 标志工作方块一起写进样板：装配室据此决定接不接这张样板（见 MolecularAssemblerBlockEntity）。
         var workstationKey = station.isEmpty() ? null : AEItemKey.of(station);
-        AugmentedPattern.encode(pattern, GRID_WIDTH, GRID_HEIGHT, encodedGrid, List.of(output),
-                workstationKey, substitute, container);
+        AugmentedPattern.encode(pattern, new AugmentedPatternData(GRID_WIDTH, GRID_HEIGHT, encodedGrid,
+                List.of(output), workstationKey, substitute, container, match.recipeId()));
 
         var consumed = logic.getBlankPatternInv().extractItem(0, 1, false);
         if (consumed.isEmpty()) {
@@ -481,7 +553,7 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
     }
 
     /** 产物预览槽：能看不能拿，也不接受客户端回写（内容只由服务端按网格算出来）。 */
-    private static final class PreviewSlot extends AppEngSlot {
+    private final class PreviewSlot extends AppEngSlot {
 
         PreviewSlot(InternalInventory inventory, int index) {
             super(inventory, index);
@@ -499,6 +571,16 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
         @Override
         public boolean mayPickup(Player player) {
             return false;
+        }
+
+        /** 多候选时在产物提示里标出「第几个 / 共几个」，玩家才知道可以滚轮切换。 */
+        @Override
+        public List<Component> getCustomTooltip(ItemStack stack) {
+            if (candidateCount <= 1) {
+                return List.of();
+            }
+            return List.of(Component.translatable("gui.ae2_crafting_integration.candidates",
+                    candidateIndex + 1, candidateCount));
         }
     }
 }
