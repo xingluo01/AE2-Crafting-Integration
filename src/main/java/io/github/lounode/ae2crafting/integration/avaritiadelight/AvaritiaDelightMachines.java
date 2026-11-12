@@ -2,6 +2,7 @@ package io.github.lounode.ae2crafting.integration.avaritiadelight;
 
 import org.jetbrains.annotations.Nullable;
 
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 
 import io.github.lounode.ae2crafting.common.logic.CraftRules;
@@ -16,6 +17,9 @@ public final class AvaritiaDelightMachines {
 
     public static final String EXTREME_COOKING_POT = "avaritia_delight:extreme_cooking_pot";
 
+    private static final ResourceLocation EXTREME_COOKING_POT_ID =
+            ResourceLocation.parse(EXTREME_COOKING_POT);
+
     private AvaritiaDelightMachines() {
     }
 
@@ -24,6 +28,6 @@ public final class AvaritiaDelightMachines {
     }
 
     public static boolean isExtremeCookingPot(@Nullable ItemStack station) {
-        return EXTREME_COOKING_POT.equals(CraftRules.itemId(station));
+        return EXTREME_COOKING_POT_ID.equals(CraftRules.itemKey(station));
     }
 }

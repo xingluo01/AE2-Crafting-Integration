@@ -1,7 +1,11 @@
 package io.github.lounode.ae2crafting.integration.avaritiadelight;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -41,6 +45,8 @@ public final class ExtremeCookingPotMatcher implements GridMatcher {
             ResourceLocation.fromNamespaceAndPath("avaritia_delight", "extreme_cooking");
     private static final int INPUT_SLOTS = 81;
     private static final String CONTAINER_GETTER = "getOutputContainer";
+    /** 按配方类缓存反射结果：配方几十上百条时，每次匹配都 getMethod 会成为明显开销。 */
+    private static final Map<Class<?>, Optional<Method>> CONTAINER_GETTERS = new ConcurrentHashMap<>();
 
     @Nullable
     @Override
@@ -86,7 +92,7 @@ public final class ExtremeCookingPotMatcher implements GridMatcher {
     }
 
     private static boolean containerMatches(Recipe recipe, ItemStack container) {
-        var expected = containerOf(recipe, CONTAINER_GETTER);
+        var expected = containerOf(recipe);
         // 配方没声明容纳物时不限制；声明了就必须是同一件物品。
         // 不读 getContainerOverride：锅的方块实体从不调用它，它只是 JSON 显式参数的原样副本，
         // 拿它当备选会放行本该被拒的容器。
@@ -94,9 +100,18 @@ public final class ExtremeCookingPotMatcher implements GridMatcher {
     }
 
     /** 反射读邻居配方的容器 getter；方法不存在或抛错都按「不要求容器」处理，不让判定器崩。 */
-    private static ItemStack containerOf(Recipe recipe, String name) {
+    private static ItemStack containerOf(Recipe recipe) {
+        var method = CONTAINER_GETTERS.computeIfAbsent(recipe.getClass(), type -> {
+            try {
+                return Optional.of(type.getMethod(CONTAINER_GETTER));
+            } catch (NoSuchMethodException e) {
+                return Optional.empty();
+            }
+        }).orElse(null);
+        if (method == null) {
+            return ItemStack.EMPTY;
+        }
         try {
-            var method = recipe.getClass().getMethod(name);
             return method.invoke(recipe) instanceof ItemStack stack ? stack : ItemStack.EMPTY;
         } catch (ReflectiveOperationException | RuntimeException e) {
             return ItemStack.EMPTY;

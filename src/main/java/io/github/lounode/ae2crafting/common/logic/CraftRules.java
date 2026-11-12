@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.jetbrains.annotations.Nullable;
 
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -37,15 +38,17 @@ public final class CraftRules {
         PEDESTAL
     }
 
-    private static final Map<String, Catalyst> CATALYSTS = new ConcurrentHashMap<>();
-    private static final Set<String> SPECIAL_WORKSTATIONS = ConcurrentHashMap.newKeySet();
+    // 键用 ResourceLocation 而不是 String：查询在装配室每 tick 与判定器每次匹配都会跑，
+    // getKey(...).toString() 每次都会新建字符串；ResourceLocation 是注册表里现成的对象。
+    private static final Map<ResourceLocation, Catalyst> CATALYSTS = new ConcurrentHashMap<>();
+    private static final Set<ResourceLocation> SPECIAL_WORKSTATIONS = ConcurrentHashMap.newKeySet();
 
     private CraftRules() {
     }
 
     /** 由 {@code integration/<邻居>} 在模组初始化时调用；重复登记同一 id 以最后一次为准。 */
     public static void registerCatalyst(String itemId, Catalyst type) {
-        CATALYSTS.put(itemId, type);
+        CATALYSTS.put(ResourceLocation.parse(itemId), type);
     }
 
     /**
@@ -55,26 +58,26 @@ public final class CraftRules {
      * 原版配方截胡。判定依据是物品 id，不加载邻居类。</p>
      */
     public static void registerSpecialWorkstation(String itemId) {
-        SPECIAL_WORKSTATIONS.add(itemId);
+        SPECIAL_WORKSTATIONS.add(ResourceLocation.parse(itemId));
     }
 
-    /** 物品 id，例如 {@code extendedcrafting:ender_crafter}。空栈返回 {@code null}。 */
+    /** 物品的注册键，例如 {@code extendedcrafting:ender_crafter}。空栈返回 {@code null}。 */
     @Nullable
-    public static String itemId(ItemStack stack) {
+    public static ResourceLocation itemKey(ItemStack stack) {
         if (stack == null || stack.isEmpty()) {
             return null;
         }
-        return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+        return BuiltInRegistries.ITEM.getKey(stack.getItem());
     }
 
     public static boolean isSpecialWorkstation(@Nullable ItemStack station) {
-        var id = itemId(station);
+        var id = itemKey(station);
         return id != null && SPECIAL_WORKSTATIONS.contains(id);
     }
 
     @Nullable
     public static Catalyst catalystOf(ItemStack stack) {
-        var id = itemId(stack);
+        var id = itemKey(stack);
         return id == null ? null : CATALYSTS.get(id);
     }
 

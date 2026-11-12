@@ -2,6 +2,7 @@ package io.github.lounode.ae2crafting.integration.extendedcrafting;
 
 import org.jetbrains.annotations.Nullable;
 
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 
 import io.github.lounode.ae2crafting.common.logic.CraftKind;
@@ -23,6 +24,11 @@ public final class ExtendedCraftingMachines {
     public static final String FLUX_ALTERNATOR = "extendedcrafting:flux_alternator";
     public static final String PEDESTAL = "extendedcrafting:pedestal";
 
+    // 判定器每次匹配都要比标志物，提前 parse 成 ResourceLocation，避免反复造字符串。
+    private static final ResourceLocation ENDER_CRAFTER_ID = ResourceLocation.parse(ENDER_CRAFTER);
+    private static final ResourceLocation FLUX_CRAFTER_ID = ResourceLocation.parse(FLUX_CRAFTER);
+    private static final ResourceLocation CRAFTING_CORE_ID = ResourceLocation.parse(CRAFTING_CORE);
+
     private ExtendedCraftingMachines() {
     }
 
@@ -37,15 +43,15 @@ public final class ExtendedCraftingMachines {
     }
 
     public static boolean isEnderCrafter(@Nullable ItemStack station) {
-        return ENDER_CRAFTER.equals(CraftRules.itemId(station));
+        return ENDER_CRAFTER_ID.equals(CraftRules.itemKey(station));
     }
 
     public static boolean isFluxCrafter(@Nullable ItemStack station) {
-        return FLUX_CRAFTER.equals(CraftRules.itemId(station));
+        return FLUX_CRAFTER_ID.equals(CraftRules.itemKey(station));
     }
 
     public static boolean isCraftingCore(@Nullable ItemStack station) {
-        return CRAFTING_CORE.equals(CraftRules.itemId(station));
+        return CRAFTING_CORE_ID.equals(CraftRules.itemKey(station));
     }
 
     /** 标志物对应的耗时规则类别；不是末影/通量合成器时返回 {@link CraftKind#NORMAL}。 */

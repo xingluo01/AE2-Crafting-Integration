@@ -9,6 +9,7 @@ import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
 import com.blakebr0.extendedcrafting.api.TableCraftingInput;
+import com.blakebr0.extendedcrafting.crafting.recipe.ShapedTableRecipe;
 import com.blakebr0.extendedcrafting.init.ModRecipeTypes;
 
 import io.github.lounode.ae2crafting.common.logic.GridBounds;
@@ -44,6 +45,13 @@ public final class ExtendedCraftingTableMatcher implements GridMatcher {
 
         for (var holder : level.getRecipeManager().getAllRecipesFor(type)) {
             var recipe = holder.value();
+            // 有形状配方的宽高必须与包围盒完全相等（ShapedRecipePattern#matches 的口径），
+            // 先比宽高就能跳过绝大多数配方，省掉 matches 内部的图案逐格比较。
+            // 无形状配方没有尺寸可预筛，仍走 matches。
+            if (recipe instanceof ShapedTableRecipe shaped
+                    && (shaped.getWidth() != bounds.width() || shaped.getHeight() != bounds.height())) {
+                continue;
+            }
             var input = inputsByTier.computeIfAbsent(recipe.getTier(),
                     tier -> TableCraftingInput.of(width, height, items, tier));
             if (recipe.matches(input, level)) {

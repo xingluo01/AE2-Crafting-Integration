@@ -208,6 +208,10 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
      */
     private void loadPatternIfNeeded() {
         var data = currentPatternData();
+        // 先比对象身份：槽位内容没变时组件是同一个实例，81 格深比较可以整段跳过。
+        if (data == loadedPattern) {
+            return;
+        }
         if (data == null || data.equals(loadedPattern)) {
             loadedPattern = data;
             return;
@@ -310,13 +314,13 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
     }
 
     private void updatePreviewIfNeeded() {
-        var grid = snapshotGrid();
         var station = stationItem();
-        int signature = signatureOf(grid, station);
+        int signature = signatureOfGrid(station);
         if (signature == lastGridSignature) {
             return;
         }
         lastGridSignature = signature;
+        var grid = snapshotGrid();
         var match = matchOutput(AugmentedRecipeMatcher.toItemStacks(grid), station);
         previewOutput = match != null ? GenericStack.fromItemStack(match.output()) : null;
         previewInventory.setItemDirect(0,
@@ -348,10 +352,14 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
 
     /**
      * 网格 + 标志物的签名。标志物也进签名：换一张工作台等于换一个 tier，产物必须跟着变。
+     *
+     * <p>直接遍历 {@code gridInventory}，不建 81 元素快照：签名每 tick 都要比一次，
+     * 稳定状态下这条路径应当零分配。</p>
      */
-    private static int signatureOf(List<@Nullable GenericStack> grid, ItemStack station) {
+    private int signatureOfGrid(ItemStack station) {
         int signature = station.isEmpty() ? 0 : station.hashCode();
-        for (var stack : grid) {
+        for (int i = 0; i < GRID_SLOTS; i++) {
+            var stack = gridInventory.getStack(i);
             signature = signature * 31 + (stack == null ? 0 : stack.hashCode());
         }
         return signature;
