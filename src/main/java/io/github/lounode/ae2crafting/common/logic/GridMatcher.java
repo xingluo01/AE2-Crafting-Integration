@@ -23,13 +23,18 @@ public interface GridMatcher {
     /**
      * 一次命中的结果。
      *
-     * @param output    产物。已经过 {@code assemble}，数量是本次合成的真实产出
-     * @param recipeId  命中的配方 id；邻居的配方类型拿不到 id 时允许为 {@code null}
-     * @param remaining 合成后每格剩下的东西（铁桶→空桶、无尽的不消耗催化剂），
-     *                  <b>长度与顺序与传进 {@code match} 的 {@code items} 一致</b>；
-     *                  没有余料信息时是空列表
+     * @param output         产物。已经过 {@code assemble}，数量是本次合成的真实产出
+     * @param recipeId       命中的配方 id；邻居的配方类型拿不到 id 时允许为 {@code null}
+     * @param remaining      合成后每格剩下的东西（铁桶→空桶、无尽的不消耗催化剂），
+     *                       <b>长度与顺序与传进 {@code match} 的 {@code items} 一致</b>；
+     *                       没有余料信息时是空列表
+     * @param kind           命中的机器类别；装配室据此决定速度折减与输入槽位校验。
+     *                       普通网格合成用 {@link CraftKind#NORMAL}
+     * @param requiredInputs 这条配方需要的输入物品数；只有组合合成器会用到（校验基座数量），
+     *                       其余判定器填 0
      */
-    record Match(ItemStack output, @Nullable ResourceLocation recipeId, List<ItemStack> remaining) {
+    record Match(ItemStack output, @Nullable ResourceLocation recipeId, List<ItemStack> remaining,
+            CraftKind kind, int requiredInputs) {
 
         public Match {
             var sanitized = new java.util.ArrayList<ItemStack>(remaining.size());
@@ -39,9 +44,20 @@ public interface GridMatcher {
             remaining = List.copyOf(sanitized);
         }
 
+        /** 普通网格合成的写法，兼容既有判定器。 */
+        public Match(ItemStack output, @Nullable ResourceLocation recipeId, List<ItemStack> remaining) {
+            this(output, recipeId, remaining, CraftKind.NORMAL, 0);
+        }
+
         /** 不关心余料的旧写法。 */
         public Match(ItemStack output, @Nullable ResourceLocation recipeId) {
             this(output, recipeId, List.of());
+        }
+
+        /** 特殊工作台的写法：带类别与所需输入数。 */
+        public static Match special(ItemStack output, @Nullable ResourceLocation recipeId,
+                List<ItemStack> remaining, CraftKind kind, int requiredInputs) {
+            return new Match(output, recipeId, remaining, kind, requiredInputs);
         }
     }
 

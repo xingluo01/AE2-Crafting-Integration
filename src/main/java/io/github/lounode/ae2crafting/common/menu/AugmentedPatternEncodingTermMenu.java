@@ -34,7 +34,9 @@ import de.mari_023.ae2wtlib.api.terminal.WTMenuHost;
 import io.github.lounode.ae2crafting.AE2CraftingIntegration;
 import io.github.lounode.ae2crafting.common.item.AugmentedPatternItem;
 import io.github.lounode.ae2crafting.common.logic.AugmentedRecipeMatcher;
+import io.github.lounode.ae2crafting.common.logic.CraftKind;
 import io.github.lounode.ae2crafting.common.logic.GridBounds;
+import io.github.lounode.ae2crafting.common.logic.GridMatcher;
 import io.github.lounode.ae2crafting.common.pattern.AugmentedPattern;
 import io.github.lounode.ae2crafting.common.pattern.AugmentedPatternData;
 import io.github.lounode.ae2crafting.registry.ModDataComponents;
@@ -236,6 +238,29 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
             }
         }
 
+        // 产物容纳物按顺位接在最后一个原料之后，玩家在编码台上仍能看到、能改。
+        var container = data.container();
+        if (container != null) {
+            int last = -1;
+            for (int i = 0; i < GRID_SLOTS; i++) {
+                if (gridInventory.getStack(i) != null) {
+                    last = i;
+                }
+            }
+            int slot = last + 1;
+            if (slot >= GRID_SLOTS) {
+                for (int i = GRID_SLOTS - 1; i >= 0; i--) {
+                    if (gridInventory.getStack(i) == null) {
+                        slot = i;
+                        break;
+                    }
+                }
+            }
+            if (slot < GRID_SLOTS) {
+                gridInventory.setStack(slot, container);
+            }
+        }
+
         var workstation = data.workstation();
         workstationInventory.setStack(0,
                 workstation == null ? null : new GenericStack(workstation, 1));
@@ -292,7 +317,8 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
             return;
         }
         lastGridSignature = signature;
-        previewOutput = matchOutput(AugmentedRecipeMatcher.toItemStacks(grid), station);
+        var match = matchOutput(AugmentedRecipeMatcher.toItemStacks(grid), station);
+        previewOutput = match != null ? GenericStack.fromItemStack(match.output()) : null;
         previewInventory.setItemDirect(0,
                 previewOutput != null ? GenericStack.wrapInItemStack(previewOutput) : ItemStack.EMPTY);
     }
@@ -332,26 +358,29 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
     }
 
     /**
-     * 拿整张网格 + 标志物去问判定器链。返回值已经是 {@code assemble} 过的成品，不是配方结果模板。
+     * 拿整张网格 + 标志物去问判定器链。
+     *
+     * <p>返回整个 {@link GridMatcher.Match} 而不只是产物：编码时要看 {@code kind()} 才能决定
+     * 这张网格能不能居中——组合合成的「中心 + 螺旋」是位置敏感的坐标系，居中会把中心格挪走。</p>
      */
     @Nullable
-    private GenericStack matchOutput(List<ItemStack> items, ItemStack station) {
-        var match = AugmentedRecipeMatcher.match(getPlayer().level(), items, GRID_WIDTH, GRID_HEIGHT, station);
-        return match != null ? GenericStack.fromItemStack(match.output()) : null;
+    private GridMatcher.Match matchOutput(List<ItemStack> items, ItemStack station) {
+        return AugmentedRecipeMatcher.match(getPlayer().level(), items, GRID_WIDTH, GRID_HEIGHT, station);
     }
 
     /**
      * 把当前 9x9 网格写成一张增广合成样板。
      *
-     * <p>与 AE2 一样要求「空白样板槽有货、已编码槽为空」：已编码槽非空时先让玩家取走，
-     * 而不是悄悄覆盖——样板带组件，覆盖等于凭空销毁玩家的编码结果。</p>
+     * <p>只要求空白样板槽有货。输出槽里已有样板时直接覆盖——玩家再点一次编码就是想换一张，
+     * 旧样板带组件、覆盖等于销毁，这是按钮的既定语义。</p>
      *
      * <p>这里重新跑一次匹配而不是复用预览缓存：预览是「每 tick 签名变了才更新」的懒值，
      * 按钮点击与它之间可能隔着一次未广播的槽位改动。多算一次匹配远比编出错样板便宜。</p>
      *
      * <p><b>写进样板的网格是居中后的</b>：玩家把图案摆在编码台的哪个角落都无所谓，样板里
      * 一律以 9×9 的中心对齐。装配室执行时再按目标工作台的尺寸居中铺开——这样同一张样板
-     * 换到 5×5 / 7×7 / 11×11 的台上都能落到正确位置。</p>
+     * 换到 5×5 / 7×7 / 11×11 的台上都能落到正确位置。唯一的例外是组合合成器：它的网格是
+     * 「中心格 + 螺旋」的位置敏感坐标系，必须原样写入。</p>
      */
     public void encode() {
         if (isClientSide()) {
@@ -361,11 +390,12 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
         var grid = snapshotGrid();
         var station = stationItem();
         var items = AugmentedRecipeMatcher.toItemStacks(grid);
-        var output = matchOutput(items, station);
-        if (output == null) {
+        var match = matchOutput(items, station);
+        if (match == null) {
             return;
         }
-        if (!logic.getEncodedPatternInv().getStackInSlot(0).isEmpty()) {
+        var output = GenericStack.fromItemStack(match.output());
+        if (output == null) {
             return;
         }
         if (logic.getBlankPatternInv().getStackInSlot(0).isEmpty()) {
@@ -373,14 +403,34 @@ public class AugmentedPatternEncodingTermMenu extends MEStorageMenu {
         }
 
         var bounds = GridBounds.ofItems(items, GRID_WIDTH, GRID_HEIGHT);
-        var centered = bounds.isEmpty() ? grid
+        var centered = match.kind() == CraftKind.COMBINATION || bounds.isEmpty() ? grid
                 : bounds.centerIn(grid, GRID_WIDTH, GRID_WIDTH, GRID_HEIGHT, null);
+
+        // 终焉厨锅：网格里顺位最后的一件是产物容纳物。它每次合成都会消耗，
+        // 编进样板的独立字段而不是占着 9×9 的一格，装配室就不会把它铺进槽位。
+        @Nullable
+        GenericStack container = null;
+        List<@Nullable GenericStack> encodedGrid = centered;
+        if (match.kind() == CraftKind.COOKING_POT) {
+            int last = -1;
+            for (int i = 0; i < centered.size(); i++) {
+                if (centered.get(i) != null) {
+                    last = i;
+                }
+            }
+            if (last >= 0) {
+                container = centered.get(last);
+                var withoutContainer = new ArrayList<GenericStack>(centered);
+                withoutContainer.set(last, null);
+                encodedGrid = withoutContainer;
+            }
+        }
 
         var pattern = new ItemStack(ModItems.AUGMENTED_CRAFTING_PATTERN.get());
         // 标志工作方块一起写进样板：装配室据此决定接不接这张样板（见 MolecularAssemblerBlockEntity）。
         var workstationKey = station.isEmpty() ? null : AEItemKey.of(station);
-        AugmentedPattern.encode(pattern, GRID_WIDTH, GRID_HEIGHT, centered, List.of(output),
-                workstationKey, substitute);
+        AugmentedPattern.encode(pattern, GRID_WIDTH, GRID_HEIGHT, encodedGrid, List.of(output),
+                workstationKey, substitute, container);
 
         var consumed = logic.getBlankPatternInv().extractItem(0, 1, false);
         if (consumed.isEmpty()) {

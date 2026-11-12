@@ -84,6 +84,38 @@ public final class GridPlacement {
         return map;
     }
 
+    /**
+     * 组合合成器的「中心 + 顺时针螺旋」布局：输入 0 落中心 (4,4)，其余按
+     * {@link SpiralGrid} 的顺序由内向外铺开。
+     *
+     * <p>配方要的是一张线性表（中心物品 + 每个基座一个无序输入），JEI 类别也只画
+     * 中心和一个聚合槽；转移时必须按这个固定坐标系还原，不能居中压缩。</p>
+     */
+    public static int[] spiralCentered(int gridWidth, int gridHeight) {
+        if (gridWidth != SpiralGrid.SIZE || gridHeight != SpiralGrid.SIZE) {
+            throw new IllegalArgumentException(
+                    "螺旋布局只支持 9x9 编码台：" + gridWidth + "x" + gridHeight);
+        }
+        int[] map = new int[gridWidth * gridHeight];
+        for (int order = 0; order < map.length; order++) {
+            map[SpiralGrid.indexAt(order)] = order;
+        }
+        return map;
+    }
+
+    /**
+     * 行优先顺位布局：输入 0 落左上角，依次填满整张网格。
+     *
+     * <p>终焉厨锅的 81 格输入就是这个顺序，容器按约定接在最后一个原料之后。</p>
+     */
+    public static int[] sequential(int gridWidth, int gridHeight) {
+        int[] map = new int[gridWidth * gridHeight];
+        for (int i = 0; i < map.length; i++) {
+            map[i] = i;
+        }
+        return map;
+    }
+
     /** 映射表里有几个非空格子。用于断言「输入槽数与类别尺寸是否自洽」。 */
     public static int placedCount(int[] map) {
         int count = 0;

@@ -35,9 +35,14 @@ import appeng.api.stacks.GenericStack;
  * <p><b>{@code substitute} 是编码终端「替换已启用 / 已禁用」开关的状态</b>：写进样板后，
  * 把样板放回输出槽能还原开关，装配室也据此决定输入校验是否放宽。老样板没有这一项，
  * 解码后默认 {@code false}（替换已禁用），行为与加字段之前一致。</p>
+ *
+ * <p><b>{@code container} 是终焉厨锅的产物容纳物</b>（碗、桶之类）：每次合成消耗一份，
+ * 所以它作为样板的最后一个输入参与备料，但<b>不写进 {@code grid}</b>——装配室不把它铺进
+ * 9×9 槽位，只从计数器里扣掉。老样板没有这一项，解码后为 {@code null}。</p>
  */
 public record AugmentedPatternData(int width, int height, List<@Nullable GenericStack> grid,
-        List<GenericStack> outputs, @Nullable AEItemKey workstation, boolean substitute) {
+        List<GenericStack> outputs, @Nullable AEItemKey workstation, boolean substitute,
+        @Nullable GenericStack container) {
 
     /** 与 {@code AssemblerSlots.GRID_SIZE} 一致；写死在这里避免 common 层依赖菜单包。 */
     public static final int MAX_DIMENSION = 9;
@@ -72,25 +77,34 @@ public record AugmentedPatternData(int width, int height, List<@Nullable Generic
                         .forGetter(data -> Optional.ofNullable(data.workstation())),
                 // 同样是可选字段：老样板按「替换已禁用」处理。
                 Codec.BOOL.optionalFieldOf("substitute")
-                        .forGetter(data -> Optional.of(data.substitute())))
-                .apply(builder, (width, height, grid, outputs, workstation, substitute) ->
+                        .forGetter(data -> Optional.of(data.substitute())),
+                // 可选字段：老样板没有产物容纳物。
+                GenericStack.CODEC.optionalFieldOf("container")
+                        .forGetter(data -> Optional.ofNullable(data.container())))
+                .apply(builder, (width, height, grid, outputs, workstation, substitute, container) ->
                         new AugmentedPatternData(width, height, grid, outputs,
-                                workstation.orElse(null), substitute.orElse(false))));
+                                workstation.orElse(null), substitute.orElse(false), container.orElse(null))));
 
         private Codecs() {
         }
     }
 
-    /** 不带标志工作方块与替换状态的旧写法，原版 3×3 配方与既有测试用。 */
+    /** 不带标志工作方块、替换状态与容纳物的旧写法，原版 3×3 配方与既有测试用。 */
     public AugmentedPatternData(int width, int height, List<@Nullable GenericStack> grid,
             List<GenericStack> outputs) {
-        this(width, height, grid, outputs, null, false);
+        this(width, height, grid, outputs, null, false, null);
     }
 
-    /** 不带替换状态的写法，默认「替换已禁用」。 */
+    /** 不带替换状态与容纳物的写法，默认「替换已禁用」。 */
     public AugmentedPatternData(int width, int height, List<@Nullable GenericStack> grid,
             List<GenericStack> outputs, @Nullable AEItemKey workstation) {
-        this(width, height, grid, outputs, workstation, false);
+        this(width, height, grid, outputs, workstation, false, null);
+    }
+
+    /** 带替换状态但不带容纳物的写法。 */
+    public AugmentedPatternData(int width, int height, List<@Nullable GenericStack> grid,
+            List<GenericStack> outputs, @Nullable AEItemKey workstation, boolean substitute) {
+        this(width, height, grid, outputs, workstation, substitute, null);
     }
 
     public AugmentedPatternData {
@@ -144,6 +158,10 @@ public record AugmentedPatternData(int width, int height, List<@Nullable Generic
             data.workstation.writeToPacket(buffer);
         }
         buffer.writeBoolean(data.substitute);
+        buffer.writeBoolean(data.container != null);
+        if (data.container != null) {
+            GenericStack.writeBuffer(data.container, buffer);
+        }
     }
 
     private static AugmentedPatternData read(RegistryFriendlyByteBuf buffer) {
@@ -160,6 +178,7 @@ public record AugmentedPatternData(int width, int height, List<@Nullable Generic
         }
         AEItemKey workstation = buffer.readBoolean() ? AEItemKey.fromPacket(buffer) : null;
         boolean substitute = buffer.readBoolean();
-        return new AugmentedPatternData(width, height, grid, outputs, workstation, substitute);
+        GenericStack container = buffer.readBoolean() ? GenericStack.readBuffer(buffer) : null;
+        return new AugmentedPatternData(width, height, grid, outputs, workstation, substitute, container);
     }
 }

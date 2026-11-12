@@ -3,8 +3,14 @@ package io.github.lounode.ae2crafting.integration;
 import net.neoforged.fml.ModList;
 
 import io.github.lounode.ae2crafting.common.logic.AugmentedRecipeMatcher;
+import io.github.lounode.ae2crafting.common.logic.CraftKind;
 import io.github.lounode.ae2crafting.integration.avaritia.AvaritiaSmithingMatcher;
 import io.github.lounode.ae2crafting.integration.avaritia.AvaritiaTableMatcher;
+import io.github.lounode.ae2crafting.integration.avaritiadelight.AvaritiaDelightMachines;
+import io.github.lounode.ae2crafting.integration.avaritiadelight.ExtremeCookingPotMatcher;
+import io.github.lounode.ae2crafting.integration.extendedcrafting.ExtendedCraftingAlternatorMatcher;
+import io.github.lounode.ae2crafting.integration.extendedcrafting.ExtendedCraftingCombinationMatcher;
+import io.github.lounode.ae2crafting.integration.extendedcrafting.ExtendedCraftingMachines;
 import io.github.lounode.ae2crafting.integration.extendedcrafting.ExtendedCraftingTableMatcher;
 
 /**
@@ -19,6 +25,7 @@ public final class ModIntegrations {
 
     private static final String EXTENDED_CRAFTING = "extendedcrafting";
     private static final String AVARITIA = "avaritia";
+    private static final String AVARITIA_DELIGHT = "avaritia_delight";
 
     private ModIntegrations() {
     }
@@ -31,12 +38,24 @@ public final class ModIntegrations {
      */
     public static void registerRecipeMatchers() {
         if (ModList.get().isLoaded(EXTENDED_CRAFTING)) {
+            ExtendedCraftingMachines.registerRules();
+            // 特殊工作台的判定器必须排在普通表格之前：它们同样吃 3×3 / 9×9 图案，
+            // 表格判定器不限标志物，会把同一批原料先解释成表格配方。
+            AugmentedRecipeMatcher.registerIntegration(
+                    new ExtendedCraftingAlternatorMatcher(CraftKind.ENDER_CRAFTER));
+            AugmentedRecipeMatcher.registerIntegration(
+                    new ExtendedCraftingAlternatorMatcher(CraftKind.FLUX_CRAFTER));
+            AugmentedRecipeMatcher.registerIntegration(new ExtendedCraftingCombinationMatcher());
             AugmentedRecipeMatcher.registerIntegration(new ExtendedCraftingTableMatcher());
         }
         if (ModList.get().isLoaded(AVARITIA)) {
             AugmentedRecipeMatcher.registerIntegration(new AvaritiaTableMatcher());
             // 无尽锻造不是网格配方：五格十字，靠标志物「无尽锻造台」分流。排在表格之后，两者互斥。
             AugmentedRecipeMatcher.registerIntegration(new AvaritiaSmithingMatcher());
+        }
+        if (ModList.get().isLoaded(AVARITIA_DELIGHT)) {
+            AvaritiaDelightMachines.registerRules();
+            AugmentedRecipeMatcher.registerIntegration(new ExtremeCookingPotMatcher());
         }
     }
 }

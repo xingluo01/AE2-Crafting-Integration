@@ -1,5 +1,7 @@
 package io.github.lounode.ae2crafting.client.integration.jei;
 
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -59,7 +61,43 @@ final class JeiTransferStations {
             case EXTENDED_CRAFTING -> extendedCraftingStation(tier);
             case AVARITIA_TABLE -> avaritiaStation(tier);
             case AVARITIA_SMITHING -> avaritiaSmithingStation();
+            case ENDER_CRAFTER -> enderCrafterStation();
+            case FLUX_CRAFTER -> fluxCrafterStation();
+            case COMBINATION -> combinationStation();
+            case COOKING_POT -> cookingPotStation();
         };
+    }
+
+    private static ItemStack enderCrafterStation() {
+        if (!ModList.get().isLoaded(EXTENDED_CRAFTING)) {
+            return ItemStack.EMPTY;
+        }
+        return new ItemStack(ModBlocks.ENDER_CRAFTER.get());
+    }
+
+    private static ItemStack fluxCrafterStation() {
+        if (!ModList.get().isLoaded(EXTENDED_CRAFTING)) {
+            return ItemStack.EMPTY;
+        }
+        return new ItemStack(ModBlocks.FLUX_CRAFTER.get());
+    }
+
+    private static ItemStack combinationStation() {
+        if (!ModList.get().isLoaded(EXTENDED_CRAFTING)) {
+            return ItemStack.EMPTY;
+        }
+        return new ItemStack(ModBlocks.CRAFTING_CORE.get());
+    }
+
+    /**
+     * 终焉厨锅按物品 id 查：无尽乐事没有编译期依赖，这里不能出现它的类名。
+     * 查不到（模组没装或改了 id）时返回空栈，转移只铺原料、不动标志物。
+     */
+    private static ItemStack cookingPotStation() {
+        return BuiltInRegistries.ITEM
+                .getOptional(ResourceLocation.fromNamespaceAndPath("avaritia_delight", "extreme_cooking_pot"))
+                .map(ItemStack::new)
+                .orElse(ItemStack.EMPTY);
     }
 
     private static int extendedCraftingTier(Recipe<?> recipe) {

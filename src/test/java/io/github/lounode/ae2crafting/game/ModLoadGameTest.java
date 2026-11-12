@@ -14,7 +14,9 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import appeng.api.crafting.PatternDetailsHelper;
 import appeng.api.features.GridLinkables;
 import appeng.api.parts.IPartItem;
+import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.GenericStack;
+import appeng.core.definitions.AEItems;
 import appeng.items.parts.PartItem;
 import appeng.items.tools.powered.WirelessTerminalItem;
 import appeng.menu.SlotSemantics;
@@ -26,6 +28,7 @@ import io.github.lounode.ae2crafting.common.menu.AugmentedPatternEncodingTermMen
 import io.github.lounode.ae2crafting.common.part.AugmentedPatternEncodingTerminalPart;
 import io.github.lounode.ae2crafting.common.pattern.AugmentedPattern;
 import io.github.lounode.ae2crafting.registry.ModBlocks;
+import io.github.lounode.ae2crafting.registry.ModDataComponents;
 import io.github.lounode.ae2crafting.registry.ModItems;
 import io.github.lounode.ae2crafting.registry.ModMenuTypes;
 
@@ -103,6 +106,48 @@ public class ModLoadGameTest {
         AugmentedPattern.encode(augmented, 3, 3, grid,
                 List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_BLOCK))), null);
         helper.assertTrue(slot.mayPlace(augmented), "增广合成样板反而放不进样板输出槽");
+        helper.succeed();
+    }
+
+    /** 输出槽已有样板时再点编码，应该直接覆盖，而不是什么都不做。 */
+    @GameTest(template = "empty")
+    public void encodeOverwritesExistingPattern(GameTestHelper helper) {
+        var item = ModItems.WIRELESS_TERMINAL.get();
+        var player = helper.makeMockPlayer(GameType.SURVIVAL);
+        var locator = MenuLocators.forStack(new ItemStack(item));
+        var host = new WirelessAugmentedPatternTerminalHost(item, player, locator, (p, menu) -> {
+        });
+        var menu = new AugmentedPatternEncodingTermMenu(0, player.getInventory(), host);
+        var logic = menu.getLogic();
+
+        // 先放一张旧的增广样板占住输出槽。
+        var oldGrid = new ArrayList<GenericStack>(81);
+        for (int i = 0; i < 81; i++) {
+            oldGrid.add(null);
+        }
+        oldGrid.set(0, GenericStack.fromItemStack(new ItemStack(Items.STONE)));
+        var oldPattern = new ItemStack(ModItems.AUGMENTED_CRAFTING_PATTERN.get());
+        AugmentedPattern.encode(oldPattern, 9, 9, oldGrid,
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.DIRT))), null);
+        logic.getEncodedPatternInv().setItemDirect(0, oldPattern);
+
+        // 空白样板 + 3×3 铁锭，能编出铁块。
+        logic.getBlankPatternInv().setItemDirect(0, AEItems.BLANK_PATTERN.stack());
+        for (int y = 3; y <= 5; y++) {
+            for (int x = 3; x <= 5; x++) {
+                logic.getEncodedInputInv().setStack(y * 9 + x,
+                        GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT)));
+            }
+        }
+
+        menu.encode();
+
+        var result = logic.getEncodedPatternInv().getStackInSlot(0);
+        helper.assertFalse(result.isEmpty(), "编码后输出槽空了");
+        var data = result.get(ModDataComponents.AUGMENTED_PATTERN.get());
+        helper.assertTrue(data != null, "输出槽里不是增广样板");
+        helper.assertTrue(data.outputs().getFirst().what().equals(AEItemKey.of(Items.IRON_BLOCK)),
+                "输出槽没有被新样板覆盖：" + data.outputs());
         helper.succeed();
     }
 }

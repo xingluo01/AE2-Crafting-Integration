@@ -46,11 +46,16 @@ public class AugmentedPattern implements IPatternDetails {
         }
         this.data = encoded;
 
-        var builtInputs = new ArrayList<IInput>(data.filledSlots());
+        var builtInputs = new ArrayList<IInput>(data.filledSlots() + 1);
         for (var stack : data.grid()) {
             if (stack != null) {
                 builtInputs.add(new Input(stack, data.substitute()));
             }
+        }
+        // 产物容纳物排在 getInputs() 最后：AE2 按这个顺序给 pushPattern 的 table 装料，
+        // 装配室据此只消耗它、不铺进 9×9 槽位（见 MolecularAssemblerBlockEntity#fillGrid）。
+        if (data.container() != null) {
+            builtInputs.add(new Input(data.container(), data.substitute()));
         }
         if (builtInputs.isEmpty()) {
             throw new IllegalArgumentException("Augmented pattern has no inputs: " + definition);
@@ -80,15 +85,31 @@ public class AugmentedPattern implements IPatternDetails {
     public static void encode(ItemStack stack, int width, int height,
             List<@Nullable GenericStack> grid, List<GenericStack> outputs, @Nullable AEItemKey workstation,
             boolean substitute) {
+        encode(stack, width, height, grid, outputs, workstation, substitute, null);
+    }
+
+    /**
+     * 带产物容纳物的写法。{@code container} 每合成一次消耗一份，作为独立的最后一个输入，
+     * 不占 {@code grid} 的格子，装配室也不会把它铺进 9×9 槽位。
+     */
+    public static void encode(ItemStack stack, int width, int height,
+            List<@Nullable GenericStack> grid, List<GenericStack> outputs, @Nullable AEItemKey workstation,
+            boolean substitute, @Nullable GenericStack container) {
         Objects.requireNonNull(stack, "stack");
         stack.set(ModDataComponents.AUGMENTED_PATTERN.get(),
-                new AugmentedPatternData(width, height, grid, outputs, workstation, substitute));
+                new AugmentedPatternData(width, height, grid, outputs, workstation, substitute, container));
     }
 
     /** 这张样板要求的工作台；{@code null} 表示不需要（原版 3×3 之类）。 */
     @Nullable
     public AEItemKey getWorkstation() {
         return data.workstation();
+    }
+
+    /** 每次合成额外消耗的产物容纳物；{@code null} 表示不需要。 */
+    @Nullable
+    public GenericStack getContainer() {
+        return data.container();
     }
 
     /** 样板记录的网格尺寸与内容；界面画 9×9 预览时要用。 */

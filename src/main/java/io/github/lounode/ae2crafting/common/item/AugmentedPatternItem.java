@@ -94,6 +94,13 @@ public class AugmentedPatternItem extends EncodedPatternItem<AugmentedPattern> {
             lines.add(line);
             first = false;
         }
+
+        // 产物容纳物不在 9×9 网格里，没有坐标可标，但每次合成都会消耗一份，必须让玩家看见。
+        var container = details.getContainer();
+        if (container != null) {
+            lines.add(Component.empty().append(first ? with : and)
+                    .append(getTooltipEntryLine(container)));
+        }
     }
 
     /** 坐标串用灰色小字跟在物品后面：(列,行) (列,行) … */

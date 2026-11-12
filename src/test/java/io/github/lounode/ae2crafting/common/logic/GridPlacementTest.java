@@ -81,4 +81,34 @@ class GridPlacementTest {
     void crossCenteredRejectsTooSmallGrid() {
         assertThrows(IllegalArgumentException.class, () -> GridPlacement.crossCentered(2, 2));
     }
+
+    @Test
+    void spiralCenteredStartsAtCenterAndFillsEveryCell() {
+        int[] map = GridPlacement.spiralCentered(GRID, GRID);
+
+        assertEquals(GRID * GRID, GridPlacement.placedCount(map));
+        assertEquals(0, map[SpiralGrid.CENTER_Y * GRID + SpiralGrid.CENTER_X], "中心格必须是第 0 个输入");
+        assertEquals(1, map[SpiralGrid.CENTER_Y * GRID + SpiralGrid.CENTER_X + 1], "第二个输入在中心右侧");
+        assertEquals(2, map[(SpiralGrid.CENTER_Y + 1) * GRID + SpiralGrid.CENTER_X + 1],
+                "第三个输入在右下（顺时针第二步）");
+        // 与 SpiralGrid 自己的顺序逐格一致，转移端和匹配端不会各说各话。
+        for (int order = 0; order < GRID * GRID; order++) {
+            assertEquals(order, map[SpiralGrid.indexAt(order)]);
+        }
+    }
+
+    @Test
+    void spiralCenteredRejectsNonNineByNine() {
+        assertThrows(IllegalArgumentException.class, () -> GridPlacement.spiralCentered(3, 3));
+    }
+
+    @Test
+    void sequentialFillsRowByRow() {
+        int[] map = GridPlacement.sequential(GRID, GRID);
+
+        assertEquals(GRID * GRID, GridPlacement.placedCount(map));
+        for (int i = 0; i < map.length; i++) {
+            assertEquals(i, map[i]);
+        }
+    }
 }

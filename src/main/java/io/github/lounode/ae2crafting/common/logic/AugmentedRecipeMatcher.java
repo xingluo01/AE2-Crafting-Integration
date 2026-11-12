@@ -118,6 +118,20 @@ public final class AugmentedRecipeMatcher {
     /** 原版合成台：裁包围盒 → 查 {@code RecipeType.CRAFTING}。 */
     private static final class VanillaCraftingMatcher implements GridMatcher {
 
+        /**
+         * 标志物是特殊工作台时让路：末影/通量合成器、组合合成器、终焉厨锅都是 3×3 或 9×9 的
+         * 网格配方，若原版判定器抢先命中，同一个图案会被解释成普通配方。
+         */
+        @Nullable
+        @Override
+        public Match match(Level level, List<ItemStack> items, int width, int height,
+                @Nullable ItemStack station) {
+            if (CraftRules.isSpecialWorkstation(station)) {
+                return null;
+            }
+            return match(level, items, width, height);
+        }
+
         @Nullable
         @Override
         public Match match(Level level, List<ItemStack> items, int width, int height) {

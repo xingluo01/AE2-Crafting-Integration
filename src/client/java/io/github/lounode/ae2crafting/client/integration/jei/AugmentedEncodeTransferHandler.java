@@ -1,5 +1,6 @@
 package io.github.lounode.ae2crafting.client.integration.jei;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -9,6 +10,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import org.jetbrains.annotations.Nullable;
@@ -29,9 +34,12 @@ import mezz.jei.api.recipe.transfer.IRecipeTransferHandler;
 import mezz.jei.api.recipe.transfer.IRecipeTransferHandlerHelper;
 import mezz.jei.api.runtime.IIngredientVisibility;
 
+import com.blakebr0.extendedcrafting.api.crafting.ICombinationRecipe;
+
 import io.github.lounode.ae2crafting.common.logic.GridPlacement;
 import io.github.lounode.ae2crafting.common.logic.RecipeGridCategories;
 import io.github.lounode.ae2crafting.common.logic.RecipeGridCategories.Category;
+import io.github.lounode.ae2crafting.common.logic.RecipeGridCategories.Layout;
 import io.github.lounode.ae2crafting.common.menu.AugmentedPatternEncodingTermMenu;
 
 /**
@@ -116,23 +124,19 @@ public final class AugmentedEncodeTransferHandler
         int gridWidth = AugmentedPatternEncodingTermMenu.GRID_WIDTH;
         int gridHeight = AugmentedPatternEncodingTermMenu.GRID_HEIGHT;
 
+        var layout = category.layout();
+
         int[] placement;
         try {
-            placement = category.cross()
-                    ? GridPlacement.crossCentered(gridWidth, gridHeight)
-                    : GridPlacement.squareCentered(category.side(), gridWidth, gridHeight);
+            placement = switch (layout) {
+                case CROSS -> GridPlacement.crossCentered(gridWidth, gridHeight);
+                case SPIRAL -> GridPlacement.spiralCentered(gridWidth, gridHeight);
+                case SEQUENTIAL -> GridPlacement.sequential(gridWidth, gridHeight);
+                case SQUARE -> GridPlacement.squareCentered(category.side(), gridWidth, gridHeight);
+            };
         } catch (IllegalArgumentException e) {
             // 目前白名单里最大 9×9，走不到这里；将来接 11×11 的类别时这就是那句提示。
             return helper.createUserErrorWithTooltip(Component.translatable(TOO_LARGE));
-        }
-
-        List<IRecipeSlotView> inputs = slotsView.getSlotViews(RecipeIngredientRole.INPUT);
-        if (inputs.size() > category.slotCount()) {
-            // 类别布局变了（槽数比这套布局多）。宁可报内部错误，也不要按错位的顺序塞材料。
-            return helper.createInternalError();
-        }
-        if (category.cross() && inputs.size() < CROSS_SLOTS) {
-            return helper.createUserErrorWithTooltip(Component.translatable(INCOMPLETE));
         }
 
         if (!doTransfer) {
@@ -142,13 +146,45 @@ public final class AugmentedEncodeTransferHandler
 
         Set<AEItemKey> stock = networkStock(menu);
         int[] gridSlots = menu.getGridSlotIndices();
-        for (int cell = 0; cell < placement.length; cell++) {
-            int source = placement[cell];
-            ItemStack stack = source >= 0 && source < inputs.size()
-                    ? pick(inputs.get(source), stock)
-                    : ItemStack.EMPTY;
-            // 空格也要发：转移是「覆盖」，不发就留着上一次的残留。
-            sendSetFilter(gridSlots[cell], stack);
+        if (layout == Layout.SPIRAL || layout == Layout.SEQUENTIAL) {
+            // 这两类在 JEI 里把原料聚合成一两个槽，拿不到逐格顺序，直接读配方对象。
+            if (!(recipeBase instanceof RecipeHolder<?> holder)) {
+                return helper.createInternalError();
+            }
+            var sources = ingredientSources(layout, holder.value(), stock);
+            if (layout == Layout.SEQUENTIAL && sources.size() < category.slotCount()) {
+                // 终焉厨锅：产物容纳物顺延到最后一个原料之后。81 格已经占满时不填，
+                // 也不覆盖任何原料——留待玩家手动补，转移本身仍然成功。
+                var container = cookingPotContainer(holder.value());
+                if (!container.isEmpty()) {
+                    sources.add(container);
+                }
+            }
+            if (sources.size() > category.slotCount()) {
+                return helper.createInternalError();
+            }
+            for (int cell = 0; cell < placement.length; cell++) {
+                int source = placement[cell];
+                sendSetFilter(gridSlots[cell],
+                        source >= 0 && source < sources.size() ? sources.get(source) : ItemStack.EMPTY);
+            }
+        } else {
+            List<IRecipeSlotView> inputs = slotsView.getSlotViews(RecipeIngredientRole.INPUT);
+            if (inputs.size() > category.slotCount()) {
+                // 类别布局变了（槽数比这套布局多）。宁可报内部错误，也不要按错位的顺序塞材料。
+                return helper.createInternalError();
+            }
+            if (category.cross() && inputs.size() < CROSS_SLOTS) {
+                return helper.createUserErrorWithTooltip(Component.translatable(INCOMPLETE));
+            }
+            for (int cell = 0; cell < placement.length; cell++) {
+                int source = placement[cell];
+                ItemStack stack = source >= 0 && source < inputs.size()
+                        ? pick(inputs.get(source), stock)
+                        : ItemStack.EMPTY;
+                // 空格也要发：转移是「覆盖」，不发就留着上一次的残留。
+                sendSetFilter(gridSlots[cell], stack);
+            }
         }
 
         ItemStack station = JeiTransferStations.station(
@@ -169,8 +205,60 @@ public final class AugmentedEncodeTransferHandler
      * 其次挑在 JEI 里可见的（配置里被隐藏的物品不选），最后退回第一个候选。
      * 与 AE2 的 {@code EncodingHelper} 一个思路，只是不看数量、只看有没有。</p>
      */
+    /**
+     * 组合合成按「中心 + 附加输入」，厨锅按 81 格行优先。两者都从配方对象直接读，
+     * 因为 JEI 类别把原料聚合成一两个槽，逐格顺序已经丢了。
+     */
+    private ArrayList<ItemStack> ingredientSources(Layout layout, Recipe<?> recipe, Set<AEItemKey> stock) {
+        var result = new ArrayList<ItemStack>();
+        if (layout == Layout.SPIRAL) {
+            result.add(combinationCenter(recipe, stock));
+        }
+        for (var ingredient : recipe.getIngredients()) {
+            result.add(pick(ingredient, stock));
+        }
+        return result;
+    }
+
+    /**
+     * 终焉厨锅的产物容纳物。无尽乐事没有编译期依赖，只能反射读 {@code getOutputContainer()}；
+     * 方法不存在（别的配方）或抛错时返回空栈，转移只铺原料。
+     */
+    private ItemStack cookingPotContainer(Recipe<?> recipe) {
+        if (!ModList.get().isLoaded("avaritia_delight")) {
+            return ItemStack.EMPTY;
+        }
+        try {
+            var method = recipe.getClass().getMethod("getOutputContainer");
+            return method.invoke(recipe) instanceof ItemStack stack ? stack.copy() : ItemStack.EMPTY;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return ItemStack.EMPTY;
+        }
+    }
+
+    /** 合成拓展是编译期依赖，但仍按项目惯例先判 {@code isLoaded} 再碰它的类。 */
+    private ItemStack combinationCenter(Recipe<?> recipe, Set<AEItemKey> stock) {
+        if (!ModList.get().isLoaded("extendedcrafting")) {
+            return ItemStack.EMPTY;
+        }
+        return combinationCenterUnchecked(recipe, stock);
+    }
+
+    private ItemStack combinationCenterUnchecked(Recipe<?> recipe, Set<AEItemKey> stock) {
+        return recipe instanceof ICombinationRecipe combination
+                ? pick(combination.getInput(), stock)
+                : ItemStack.EMPTY;
+    }
+
+    private ItemStack pick(Ingredient ingredient, Set<AEItemKey> stock) {
+        return pickCandidates(List.of(ingredient.getItems()), stock);
+    }
+
     private ItemStack pick(IRecipeSlotView slot, Set<AEItemKey> stock) {
-        List<ItemStack> candidates = slot.getIngredients(VanillaTypes.ITEM_STACK).toList();
+        return pickCandidates(slot.getIngredients(VanillaTypes.ITEM_STACK).toList(), stock);
+    }
+
+    private ItemStack pickCandidates(List<ItemStack> candidates, Set<AEItemKey> stock) {
         if (candidates.isEmpty()) {
             return ItemStack.EMPTY;
         }

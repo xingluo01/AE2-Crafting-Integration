@@ -43,6 +43,8 @@ import appeng.core.definitions.AEItems;
 import appeng.util.inv.CombinedInternalInventory;
 
 import io.github.lounode.ae2crafting.common.logic.AugmentedRecipeMatcher;
+import io.github.lounode.ae2crafting.common.logic.CraftKind;
+import io.github.lounode.ae2crafting.common.logic.CraftRules;
 import io.github.lounode.ae2crafting.common.menu.AssemblerSlots;
 import io.github.lounode.ae2crafting.common.pattern.AugmentedPattern;
 import io.github.lounode.ae2crafting.registry.ModBlockEntities;
@@ -111,6 +113,15 @@ public class MolecularAssemblerBlockEntity extends AENetworkedInvBlockEntity
 
     private int progress;
     private int maxProgress = AssemblerAcceleration.FULL_PROGRESS;
+
+    /**
+     * 当前样板解析出来的配方规则。不落盘：{@link #plan} 换对象（含读档重建）时由
+     * {@link #ensureCraftRules} 重算一次，避免每 tick 重跑整条判定器链。
+     */
+    @Nullable
+    private AugmentedPattern rulesFor;
+    private CraftKind craftKind = CraftKind.NORMAL;
+    private int requiredInputs;
 
     private boolean powered;
     /** 网格 tick 的休眠标志，只在状态翻转时通知 tick 管理器，避免每 tick 都发命令。 */
@@ -246,7 +257,20 @@ public class MolecularAssemblerBlockEntity extends AENetworkedInvBlockEntity
         if (!hasRequiredWorkstation(pattern)) {
             return false;
         }
+        // 组合合成器：基础 1 个输入槽，标志物栏里每个基座再解锁 1 个（最多 80 个）。
+        // 槽位不够就当场拒收，别把原料铺进网格再让机器卡住。
+        ensureCraftRules(pattern);
+        if (craftKind == CraftKind.COMBINATION
+                && CraftRules.availableInputSlots(catalysts()) < requiredInputs) {
+            return false;
+        }
         if (!fillGrid(pattern, table)) {
+            return false;
+        }
+        // 通量合成器：每个生效的通量发电机额外扣 8000 AE。电量不够就整份拒绝，
+        // 原料还在供应器那边没被扣掉，换一台机器或等电回来再发。
+        if (!payFluxPower()) {
+            clearGrid();
             return false;
         }
 
@@ -311,12 +335,73 @@ public class MolecularAssemblerBlockEntity extends AENetworkedInvBlockEntity
         return found != null ? found : ItemStack.EMPTY;
     }
 
+    /** 9 格标志物栏的快照，供 {@link CraftRules} 数发电机与基座（按堆叠数量累加）。 */
+    private List<ItemStack> catalysts() {
+        var result = new ArrayList<ItemStack>(AssemblerSlots.CATALYST_SLOTS);
+        for (int i = 0; i < AssemblerSlots.CATALYST_SLOTS; i++) {
+            result.add(inventory.getStackInSlot(AssemblerSlots.catalyst(i)));
+        }
+        return result;
+    }
+
+    /**
+     * 从样板里的网格重跑一次判定器链，取出机器类别与所需输入数。
+     *
+     * <p>这些信息故意不写进样板：按约定编码端只带工作台，加成与槽位都在执行时按标志物栏
+     * 动态决定。缓存以 {@code plan} 的对象身份为键，读档重建 plan 后自然失效。</p>
+     */
+    private void ensureCraftRules(AugmentedPattern pattern) {
+        if (rulesFor == pattern) {
+            return;
+        }
+        rulesFor = pattern;
+        craftKind = CraftKind.NORMAL;
+        requiredInputs = 0;
+        if (level == null || level.isClientSide()) {
+            return;
+        }
+        var data = pattern.getData();
+        var items = AugmentedRecipeMatcher.toItemStacks(data.grid());
+        var match = AugmentedRecipeMatcher.match(level, items, data.width(), data.height(),
+                stationFor(pattern));
+        if (match != null) {
+            craftKind = match.kind();
+            requiredInputs = match.requiredInputs();
+        }
+    }
+
+    /**
+     * 通量合成器的额外能耗：每个生效的通量发电机 8000 AE，每次合成扣一次。
+     *
+     * <p>先 SIMULATE 再 MODULATE：电量不够时整份拒绝，不会扣到一半再失败。生效数量与耗时
+     * 倍率同一口径（上限 49），所以「装得越多越快」的代价是每次合成更贵。</p>
+     */
+    private boolean payFluxPower() {
+        long cost = CraftRules.fluxPowerCost(craftKind, catalysts());
+        if (cost <= 0) {
+            return true;
+        }
+        var grid = getMainNode().getGrid();
+        if (grid == null) {
+            return false;
+        }
+        var energy = grid.getEnergyService();
+        double requested = cost;
+        double available = energy.extractAEPower(requested, Actionable.SIMULATE, PowerMultiplier.CONFIG);
+        if (available + 1.0E-4 < requested) {
+            return false;
+        }
+        energy.extractAEPower(requested, Actionable.MODULATE, PowerMultiplier.CONFIG);
+        return true;
+    }
+
     /**
      * 把供应器给的输入按样板网格铺进 81 格。
      *
      * <p>{@code table} 的顺序与样板 {@code getInputs()} 一致，也就是<b>非空格的行优先顺序</b>，
-     * 不是 9×9 的下标。铺完后每个计数器都必须归零：剩下东西说明有输入没落地，
-     * 这时候宁可把已经铺好的也收回去，也不要带着半份原料开机。</p>
+     * 不是 9×9 的下标；产物容纳物是最后一项，只从计数器里扣掉，不铺任何槽位。铺完后每个
+     * 计数器都必须归零：剩下东西说明有输入没落地，这时候宁可把已经铺好的也收回去，
+     * 也不要带着半份原料开机。</p>
      */
     private boolean fillGrid(AugmentedPattern pattern, KeyCounter[] table) {
         var data = pattern.getData();
@@ -344,6 +429,22 @@ public class MolecularAssemblerBlockEntity extends AENetworkedInvBlockEntity
                 inventory.setItemDirect(AssemblerSlots.grid(y, x), key.toStack((int) amount));
                 counter.remove(key, amount);
             }
+        }
+
+        // 产物容纳物：AE2 已按 getInputs() 把它备进 table 的最后一份，这里只消耗、不铺槽。
+        // 不扣掉的话末尾「计数器必须归零」的校验会判定失败，把已经铺好的原料全部回滚。
+        if (pattern.getContainer() != null) {
+            if (inputIndex >= table.length) {
+                clearGrid();
+                return false;
+            }
+            var counter = table[inputIndex++];
+            var entry = counter.getFirstEntry();
+            if (entry == null || entry.getLongValue() <= 0) {
+                clearGrid();
+                return false;
+            }
+            counter.remove(entry.getKey(), entry.getLongValue());
         }
 
         for (var counter : table) {
@@ -421,7 +522,11 @@ public class MolecularAssemblerBlockEntity extends AENetworkedInvBlockEntity
             return TickRateModulation.SLEEP;
         }
 
-        int delta = (int) Math.round(getProgressPerTick() * Math.max(1, ticksSinceLastCall));
+        // 末影 / 通量合成器：没有对应发电机时慢 50 倍，每放一个减 1，最多按 49 个计。
+        ensureCraftRules(plan);
+        double multiplier = CraftRules.durationMultiplier(craftKind, catalysts());
+        int delta = (int) Math.round(
+                getProgressPerTick() / multiplier * Math.max(1, ticksSinceLastCall));
         progress += Math.max(1, delta);
         if (progress < maxProgress) {
             return TickRateModulation.FASTER;
